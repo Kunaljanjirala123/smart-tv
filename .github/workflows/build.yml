@@ -1,0 +1,39 @@
+name: Build Glass Home
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android SDK packages (official, from Google)
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-30" "build-tools;34.0.0" >/dev/null
+      - name: Build
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: bash app/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glass-home-apk
+          path: |
+            app/build/glass-home.apk
+            app/build/glass-home.apk.sha256
+      - name: Publish as the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v1.0.${{ github.run_number }}"
+          gh release create "$tag" app/build/glass-home.apk app/build/glass-home.apk.sha256 \
+            --title "Glass Home $tag" --notes "Built from ${{ github.sha }} by GitHub Actions." --latest

@@ -1,0 +1,130 @@
+# Install-GlassHome.ps1 - puts Glass Home on a Fire TV over Wi-Fi and gives it the HOME button.
+# Keep glass-home.apk and glass-home.apk.sha256 in the same folder as this script.
+# Run: double-click Install-GlassHome.bat
+$ErrorActionPreference = 'Continue'   # adb writes to stderr; every step is checked explicitly
+$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Pkg  = 'tv.glasshome'
+$GuardId = 'tv.glasshome/tv.glasshome.Guard'
+
+function Say($m)  { Write-Host "`n== $m" -ForegroundColor Cyan }
+function Ok($m)   { Write-Host "  $m" -ForegroundColor Green }
+function Warn($m) { Write-Host "  $m" -ForegroundColor Yellow }
+function Fail($m) { Write-Host "`n  $m" -ForegroundColor Red; Read-Host 'Press Enter to close'; exit 1 }
+
+# ---- adb
+$Adb = (Get-Command adb.exe -ErrorAction SilentlyContinue).Source
+foreach ($p in @("$Here\platform-tools\adb.exe", "$Here\..\firetv-clean\platform-tools\adb.exe")) {
+  if (-not $Adb -and (Test-Path $p)) { $Adb = (Resolve-Path $p).Path }
+}
+if (-not $Adb) {
+  Say 'Downloading Android platform-tools (adb) from dl.google.com'
+  $zip = "$Here\platform-tools.zip"
+  try {
+    Invoke-WebRequest 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile $zip -UseBasicParsing -ErrorAction Stop
+    Expand-Archive $zip -DestinationPath $Here -Force -ErrorAction Stop
+    Remove-Item $zip
+  } catch { Fail "Could not download adb: $_" }
+  $Adb = "$Here\platform-tools\adb.exe"
+}
+function A { & $Adb -s $script:Serial @args 2>&1 }
+function Sh([string]$cmd) { ((& $Adb -s $script:Serial shell $cmd 2>&1) -join "`n").Trim() }
+
+# ---- the APK
+Say 'Checking the app file'
+$Apk = "$Here\glass-home.apk"
+if (-not (Test-Path $Apk)) { Fail "glass-home.apk is missing from $Here" }
+$want = (Get-Content "$Here\glass-home.apk.sha256" -ErrorAction SilentlyContinue | Select-Object -First 1)
+$got  = (Get-FileHash $Apk -Algorithm SHA256).Hash.ToLower()
+if ($want -and $want.Trim().ToLower() -ne $got) { Fail "Checksum mismatch: the APK is not the one GitHub built. Not installing." }
+Ok "glass-home.apk  sha256 $got"
+
+# ---- connect
+Say 'Connecting to the TV'
+$saved = "$Here\tv-ip.txt"
+$default = if (Test-Path $saved) { (Get-Content $saved | Select-Object -First 1).Trim() } else { '' }
+$prompt = if ($default) { "TV IPv4 address [$default]" } else { 'TV IPv4 address (Settings > Network on the TV)' }
+$Ip = (Read-Host $prompt).Trim()
+if (-not $Ip) { $Ip = $default }
+if (-not $Ip) { Fail 'No address given.' }
+Set-Content $saved $Ip
+$script:Serial = "${Ip}:5555"
+& $Adb connect $script:Serial | Out-Host
+Write-Host '  If the TV asks "Allow USB debugging?", tick "Always allow" and press Allow.'
+$state = ''
+for ($i = 0; $i -lt 30; $i++) {
+  $state = ((& $Adb -s $script:Serial get-state 2>$null) -join '').Trim()
+  if ($state -eq 'device') { break }
+  Start-Sleep 2
+  if ($i % 5 -eq 4) { & $Adb connect $script:Serial | Out-Null }
+}
+if ($state -ne 'device') { Fail "The TV did not connect ($state). Check the address, that ADB debugging is on, and press Allow on the TV." }
+$maker = Sh 'getprop ro.product.manufacturer'
+$model = Sh 'getprop ro.product.model'
+$sdk   = [int](Sh 'getprop ro.build.version.sdk')
+Ok "connected: $maker $model (Android sdk $sdk)"
+if ($maker -notlike 'Amazon*') { Fail 'This is not a Fire TV. Stopping without changes.' }
+if ($sdk -lt 28) { Fail 'Glass Home needs Fire OS 7 or newer.' }
+
+# ---- install
+Say 'Installing Glass Home'
+$out = (A install -r "$Apk") -join "`n"
+if ($out -notmatch 'Success') { Fail "Install failed: $out" }
+Ok 'installed'
+Sh "dumpsys deviceidle whitelist +$Pkg" | Out-Null
+
+# ---- HOME takeover (the same method dumbtv home uses on Fire OS)
+Say 'Taking over the HOME button'
+# 1. Alarms may fire immediately, so the switch from Amazon's home is instant.
+if ($sdk -ge 31) {
+  Sh 'device_config put alarm_manager min_futurity 0' | Out-Null
+} else {
+  $cur = Sh 'settings get global alarm_manager_constants'
+  if ($cur -eq 'null') { $cur = '' }
+  $parts = @($cur -split ',' | Where-Object { $_ -and $_ -notlike 'min_futurity=*' })
+  $old = ($cur -split ',' | Where-Object { $_ -like 'min_futurity=*' } | Select-Object -First 1)
+  if ($old -and $old -ne 'min_futurity=0') { Sh "settings put global glasshome_min_futurity $($old.Split('=')[1])" | Out-Null }
+  $parts += 'min_futurity=0'
+  Sh "settings put global alarm_manager_constants $($parts -join ',')" | Out-Null
+}
+# 2. The accessibility helper that answers HOME. Any older home helper (dumbtv) is switched off.
+$svc = Sh 'settings get secure enabled_accessibility_services'
+if ($svc -eq 'null') { $svc = '' }
+$keep = @($svc -split ':' | Where-Object { $_ -and $_ -notlike 'tv.dumbtv.home/*' -and $_ -notlike "$Pkg/*" })
+$new = (@($keep) + $GuardId) -join ':'
+Sh 'settings delete secure enabled_accessibility_services' | Out-Null
+Start-Sleep 1
+Sh "settings put secure enabled_accessibility_services $new" | Out-Null
+Sh 'settings put secure accessibility_enabled 1' | Out-Null
+Sh "cmd package set-home-activity $Pkg/.Home" | Out-Null
+$bound = $false
+for ($i = 0; $i -lt 15; $i++) {
+  if ((Sh 'dumpsys accessibility') -match 'Glass Home button|tv\.glasshome') { $bound = $true; break }
+  Start-Sleep 1
+}
+if ($bound) { Ok 'HOME button: Glass Home' } else { Warn 'Fire OS has not confirmed the HOME helper yet; press HOME on the remote to check.' }
+Sh 'input keyevent KEYCODE_WAKEUP' | Out-Null
+Sh "am start -n $Pkg/.Home" | Out-Null
+
+# ---- faster app starts
+Say 'Making your apps start faster (compiling them fully, about 1-3 minutes)'
+$third = @((Sh 'pm list packages -3') -split "`n" | ForEach-Object { $_.Trim() -replace '^package:', '' } | Where-Object { $_ -and $_ -ne $Pkg })
+foreach ($p in $third) {
+  $r = Sh "cmd package compile -m speed $p"
+  if ($r -match 'Success') { Ok "fast start: $p" } else { Warn "skipped: $p" }
+}
+
+# ---- the old dumbtv home
+if ((Sh 'pm path tv.dumbtv.home') -match 'package:') {
+  $ans = Read-Host "`nRemove the old dumbtv home app? It is no longer used (y/N)"
+  if ($ans -match '^(y|yes)$') { A uninstall tv.dumbtv.home | Out-Host }
+}
+
+& $Adb disconnect $script:Serial | Out-Null
+Say 'Done'
+Write-Host '  Press HOME on the remote: Glass Home should appear.'
+Write-Host '  Menu button (three lines) on any app: pin to dock, move, hide, app info.'
+Write-Host '  Edit (top right) > Open Amazon''s home screen, any time you need it.'
+Write-Host ''
+Write-Host '  Last step: turn ADB debugging OFF on the TV (Settings > My Fire TV > Developer Options).' -ForegroundColor Yellow
+Write-Host '  Glass Home keeps working with it off.' -ForegroundColor Yellow
+Read-Host 'Press Enter to close'

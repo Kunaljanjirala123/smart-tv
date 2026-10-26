@@ -1,0 +1,5 @@
+app/build/
+windows/tv-ip.txt
+windows/platform-tools/
+windows/*.apk
+windows/*.sha256

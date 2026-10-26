@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Explicitly opaque: on some firmware DeviceDefault comes out translucent and the
+         previous app keeps drawing under the home screen. -->
+    <style name="Home" parent="android:Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/base</item>
+        <item name="android:colorBackground">@color/base</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowDisablePreview">false</item>
+        <item name="android:colorAccent">#FF8FB8FF</item>
+    </style>
+    <color name="base">#FF070912</color>
+</resources>
