@@ -25,10 +25,10 @@ import android.view.accessibility.AccessibilityEvent;
  * home window and replaces it. A plain startActivity after a HOME press is held back by Android's
  * five-second app-switch delay; an alarm-fired PendingIntent is sent by system_server, which is
  * exempt, and fires at once with {@code min_futurity=0} (set by the installer). Android 11 also
- * refuses an activity start from an app with no visible window, so a plain cover overlay stays
- * added at zero alpha (still a visible window, though SurfaceFlinger skips drawing it): covering
- * is a single alpha change and the launch goes out at the same moment. The cover also hides
- * Amazon's home, so it never flashes on screen.
+ * refuses an activity start from an app with no visible window; the glass volume bar's window
+ * (kept added at zero alpha, see Volume) is one, so the launch goes out at once, together with a
+ * plain cover overlay that hides Amazon's home so it never flashes on screen. The cover is GONE
+ * between uses: kept visible it would hold three full-screen buffers (24 MB) for nothing.
  */
 public final class Guard extends AccessibilityService {
     static final String AMAZON = "com.amazon.tv.launcher";
@@ -43,7 +43,6 @@ public final class Guard extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable uncover = this::uncover;
     private View cover;
-    private WindowManager.LayoutParams coverLp;
     private Volume volume;
     private long lastLaunch;
     private boolean onAmazonHome;
@@ -100,6 +99,7 @@ public final class Guard extends AccessibilityService {
         running = this;
         View view = new View(this);
         view.setBackgroundColor(COVER_COLOR);
+        view.setVisibility(View.GONE);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -108,8 +108,7 @@ public final class Guard extends AccessibilityService {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         lp.windowAnimations = 0;
-        lp.alpha = 0f;
-        coverLp = lp;
+        lp.setTitle("Glass Home cover");
         // The service can be re-bound while it is still starting (the installer switches it off
         // and on); the old connection's window token is then gone, so go on without the cover.
         try {
@@ -169,23 +168,15 @@ public final class Guard extends AccessibilityService {
     }
 
     private void cover() {
+        if (cover == null) return;
+        cover.setVisibility(View.VISIBLE);
         handler.removeCallbacks(uncover);
         handler.postDelayed(uncover, COVER_MAX_MS);
-        setCoverAlpha(1f);
     }
 
     private void uncover() {
         handler.removeCallbacks(uncover);
-        setCoverAlpha(0f);
-    }
-
-    private void setCoverAlpha(float a) {
-        if (cover == null || coverLp.alpha == a) return;
-        coverLp.alpha = a;
-        try {
-            ((WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(cover, coverLp);
-        } catch (IllegalArgumentException ignored) {
-        }
+        if (cover != null) cover.setVisibility(View.GONE);
     }
 
     @Override

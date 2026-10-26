@@ -44,12 +44,13 @@ $AdDns = 'dns.adguard-dns.com'
 # ---- the log: one line per change, so Restore-FireTV can undo exactly what was done.
 #   app <package> disabled|hidden
 #   setting <namespace> <key> <original value, or null>
+#   config <namespace> <key> <original value, or null>     (device_config)
 $done = @{}
 if (Test-Path $Log) {
   foreach ($l in Get-Content $Log) {
     $f = $l -split ' '
     if ($f[0] -eq 'app' -and $f.Count -ge 3) { $done["app $($f[1])"] = $true }
-    elseif ($f[0] -eq 'setting' -and $f.Count -ge 4) { $done["$($f[1]) $($f[2])"] = $true }
+    elseif (($f[0] -eq 'setting' -or $f[0] -eq 'config') -and $f.Count -ge 4) { $done["$($f[1]) $($f[2])"] = $true }
   }
 }
 function Record([string]$line) { Add-Content $Log $line }
@@ -77,6 +78,17 @@ function Set-TvSetting([string]$ns, [string]$key, [string]$value) {
     $done["$ns $key"] = $true
   }
   Sh "settings put $ns $key $value" | Out-Null
+}
+
+# The same for a device_config value.
+function Set-TvConfig([string]$ns, [string]$key, [string]$value) {
+  if (-not $done.ContainsKey("$ns $key")) {
+    $old = Sh "device_config get $ns $key"
+    if (-not $old) { $old = 'null' }
+    Record "config $ns $key $old"
+    $done["$ns $key"] = $true
+  }
+  Sh "device_config put $ns $key $value" | Out-Null
 }
 
 function Ask([string]$q, [bool]$yes) {
@@ -136,12 +148,18 @@ if (Ask 'Turn off automatic Fire OS updates?' $false) {
 
 # ---- quicker, smoother feel
 Say 'Making the TV feel quicker'
-# Opening and closing apps twice as fast; animations inside apps (Glass Home's glide) at full
-# smoothness. 0 here would make Glass Home jump instead of glide, so it is never used.
-Set-TvSetting global window_animation_scale 0.5
-Set-TvSetting global transition_animation_scale 0.5
+# Screens open and close at once; animations inside apps (Glass Home's glide) stay at full
+# smoothness: animator_duration_scale 0 would make them jump, so it is never touched.
+Set-TvSetting global window_animation_scale 0
+Set-TvSetting global transition_animation_scale 0
 Set-TvSetting global animator_duration_scale 1.0
-Ok 'app open and close animations: twice as fast'
+Ok 'app open and close animations: off, so screens switch at once'
+# Fire OS keeps at most 8 cached processes, which leaves room for only about 4 apps once its
+# own background services take their share: YouTube and Prime Video were closed with plenty of
+# memory free, so the next open was a cold start (0.8-1.5 s instead of 0.1-0.2 s). The memory
+# killer still closes apps whenever memory really runs short.
+Set-TvConfig activity_manager max_cached_processes 16
+Ok 'up to 16 apps kept ready in the background (Fire OS default: 8)'
 Sh 'am kill-all' | Out-Null
 Ok 'background apps closed to free memory'
 
