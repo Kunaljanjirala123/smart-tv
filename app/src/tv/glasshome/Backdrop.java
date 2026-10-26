@@ -1,5 +1,6 @@
 package tv.glasshome;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -192,64 +193,75 @@ final class Backdrop {
         return horizontal ? line * w + i : i * w + line;
     }
 
-    /** Full-screen wallpaper view; it never moves, the content scrolls over it. */
+    /**
+     * Full-screen wallpaper view; it never moves, the content scrolls over it. The focused app's
+     * colour is pooled into a copy of the (small) wallpaper bitmap once per change, so every frame
+     * paints the background once; only during the short crossfade are two copies painted.
+     */
     static final class Wallpaper extends View {
         private final Backdrop b;
         private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        private final Paint fade = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         private final Rect src = new Rect();
         private final RectF dst = new RectF();
+        private Bitmap now, before;
+        private float mix = 1f;
+        private int colour;
+        private ValueAnimator anim;
 
         Wallpaper(Context c) {
             super(c);
             b = get(c);
+            now = b.sharp;
+        }
+
+        /** Crossfades to the backdrop with {@code colour} pooled behind the stage. */
+        void wash(int colour) {
+            if (colour == this.colour && now != b.sharp) return;
+            this.colour = colour;
+            // Mid-fade, the picture on screen is closest to the one being faded in.
+            before = mix >= 0.5f ? now : before;
+            now = pool(colour);
+            if (anim != null) anim.cancel();
+            mix = 0f;
+            anim = ValueAnimator.ofFloat(0f, 1f);
+            anim.setDuration(420);
+            anim.setInterpolator(Ui.EASE);
+            anim.addUpdateListener(a -> {
+                mix = (float) a.getAnimatedValue();
+                invalidate();
+            });
+            anim.start();
+        }
+
+        private Bitmap pool(int colour) {
+            Bitmap out = b.sharp.copy(Bitmap.Config.ARGB_8888, true);
+            int w = out.getWidth(), h = out.getHeight(), a = Theme.now.tintAlpha, col = Ui.glow(colour);
+            Paint p = new Paint(Paint.DITHER_FLAG);
+            p.setShader(new RadialGradient(w * 0.5f, h * 0.36f, w * 0.62f,
+                    new int[] {Ui.alpha(col, a), Ui.alpha(col, a * 2 / 5), Ui.alpha(col, 0)},
+                    new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
+            new Canvas(out).drawRect(0, 0, w, h, p);
+            return out;
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            if (anim != null) anim.cancel();
+            super.onDetachedFromWindow();
         }
 
         @Override
         protected void onDraw(Canvas c) {
             src.set(0, 0, b.sharp.getWidth(), b.sharp.getHeight());
             dst.set(0, 0, getWidth(), getHeight());
-            c.drawBitmap(b.sharp, src, dst, paint);
-        }
-    }
-
-    /**
-     * A soft pool of one colour behind the stage. Two of these crossfade (alpha is a render-node
-     * property) when the focused app changes, so the backdrop takes on each app's colour without
-     * redrawing the wallpaper.
-     */
-    static final class Wash extends View {
-        private final Paint paint = new Paint(Paint.DITHER_FLAG);
-        private int colour;
-
-        Wash(Context c) {
-            super(c);
-            setAlpha(0f);
-        }
-
-        /** One gradient: fading it needs no offscreen buffer. */
-        @Override
-        public boolean hasOverlappingRendering() {
-            return false;
-        }
-
-        void setColour(int c) {
-            if (c == colour && paint.getShader() != null) return;
-            colour = c;
-            paint.setShader(null);
-            invalidate();
-        }
-
-        @Override
-        protected void onDraw(Canvas c) {
-            int w = getWidth(), h = getHeight();
-            if (paint.getShader() == null) {
-                int a = Theme.now.tintAlpha;
-                int col = Ui.glow(colour);
-                paint.setShader(new RadialGradient(w * 0.5f, h * 0.36f, w * 0.62f,
-                        new int[] {Ui.alpha(col, a), Ui.alpha(col, a * 2 / 5), Ui.alpha(col, 0)},
-                        new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
+            if (mix < 1f && before != null) {
+                c.drawBitmap(before, src, dst, paint);
+                fade.setAlpha(Math.round(mix * 255));
+                c.drawBitmap(now, src, dst, fade);
+            } else {
+                c.drawBitmap(now, src, dst, paint);
             }
-            c.drawRect(0, 0, w, h, paint);
         }
     }
 }

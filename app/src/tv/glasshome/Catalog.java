@@ -208,7 +208,7 @@ final class Catalog {
         return 0xFF000000 | (int) (r / a) << 16 | (int) (g / a) << 8 | (int) (bl / a);
     }
 
-    /** A folder: a pane of glass holding its first four apps. */
+    /** A folder: a pane of glass holding up to six of its apps. */
     static void folderArt(Item folder, int w, int h) {
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
@@ -218,13 +218,22 @@ final class Catalog {
                 Theme.now.light ? 0xFFE3E3E8 : 0xFF2E2E33, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, w, h, p);
         p.setShader(null);
-        float gap = h * 0.08f, cellH = (h - gap * 3) / 2f, cellW = cellH * 16f / 9f;
-        float left = (w - cellW * 2 - gap) / 2f;
+        // Its apps in a small grid centred on the pane: one big, two side by side, 2x2 or 3x2.
+        int n = Math.min(6, folder.members.size());
+        int cols = n <= 1 ? 1 : n <= 4 ? 2 : 3, rows = n <= 2 ? 1 : 2;
+        float gap = h * 0.07f;
+        float cellW = Math.min((w - gap * (cols + 1)) / cols, ((h - gap * (rows + 1)) / rows) / 0.6f);
+        float cellH = cellW * 0.6f;
+        if (n == 1) {
+            cellW *= 0.7f;
+            cellH *= 0.7f;
+        }
+        float left = (w - cols * cellW - (cols - 1) * gap) / 2f, top = (h - rows * cellH - (rows - 1) * gap) / 2f;
         RectF cell = new RectF();
         Matrix m = new Matrix();
-        for (int i = 0; i < Math.min(4, folder.members.size()); i++) {
+        for (int i = 0; i < n; i++) {
             Item it = folder.members.get(i);
-            float x = left + (i % 2) * (cellW + gap), y = gap + (i / 2) * (cellH + gap);
+            float x = left + (i % cols) * (cellW + gap), y = top + (i / cols) * (cellH + gap);
             cell.set(x, y, x + cellW, y + cellH);
             float r = cellH * 0.16f;
             Bitmap art = it.art;
@@ -279,7 +288,7 @@ final class Catalog {
         }
         // The glow: a small copy with room around it to spread into, blurred hard, so it fades to
         // nothing at its edges and sits exactly behind the art (no offset ghosts of the logo).
-        int sw = Math.max(8, w / 8), sh = Math.max(8, h / 8), pad = Math.round(sh * 0.7f);
+        int sw = Math.max(8, w / 8), sh = Math.max(8, h / 8), pad = Math.round(sh * 0.55f);
         Bitmap small = Bitmap.createBitmap(sw + 2 * pad, sh + 2 * pad, Bitmap.Config.ARGB_8888);
         new Canvas(small).drawBitmap(art, null, new RectF(pad, pad, pad + sw, pad + sh),
                 new Paint(Paint.FILTER_BITMAP_FLAG));

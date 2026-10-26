@@ -86,8 +86,8 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private LinearLayout column, dockRow, grid;
     private TextView appsHeader, clock, hint;
     private View scrim;
-    private final Backdrop.Wash[] washes = new Backdrop.Wash[2];
-    private int wash, washColour;
+    private Backdrop.Wallpaper wallpaper;
+    private int washColour;
     private Stage stage;
     private Lens lens;
     private View weatherPill;
@@ -351,11 +351,8 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private void build(int gridGap, int dockGap) {
         Theme t = Theme.now;
         root = new FrameLayout(this);
-        root.addView(new Backdrop.Wallpaper(this), new FrameLayout.LayoutParams(-1, -1));
-        for (int i = 0; i < 2; i++) {
-            washes[i] = new Backdrop.Wash(this);
-            root.addView(washes[i], new FrameLayout.LayoutParams(-1, -1));
-        }
+        wallpaper = new Backdrop.Wallpaper(this);
+        root.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
         // A single fill, faded as the page scrolls: no offscreen buffer needed.
         scrim = new View(this) {
             @Override
@@ -794,14 +791,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private void setWash(int colour) {
         if (colour == washColour) return;
         washColour = colour;
-        Backdrop.Wash out = washes[wash];
-        wash ^= 1;
-        Backdrop.Wash in = washes[wash];
-        in.setColour(colour);
-        in.animate().cancel();
-        in.animate().alpha(1f).setDuration(420).setInterpolator(Ui.EASE).start();
-        out.animate().cancel();
-        out.animate().alpha(0f).setDuration(420).setInterpolator(Ui.EASE).start();
+        wallpaper.wash(colour);
     }
 
     /** Keeps the band from {@code top} to {@code bottom} (content coordinates) comfortably on screen. */
@@ -824,6 +814,8 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
             Tile t = tileFor(lastFocusId);
             if (t != null) {
                 t.requestFocus();
+                // Focus given before the window is attached sends no focus event: sync the stage.
+                focused(t);
                 return;
             }
         }
@@ -835,6 +827,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
             View v = dockRow.getChildAt(Math.min(i, dockRow.getChildCount() - 1));
             if (v instanceof Tile) {
                 v.requestFocus();
+                focused(v);
                 scrollTo(0);
                 return;
             }
