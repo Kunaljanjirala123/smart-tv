@@ -78,6 +78,7 @@ final class Sheet extends FrameLayout {
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(0, Ui.dp(c, 14), 0, 0);
         list.setClipChildren(false);
+        list.setClipToPadding(false);
         final int maxH = Ui.dp(c, 400);
         ScrollView scroll = new ScrollView(c) {
             @Override
@@ -257,6 +258,7 @@ final class Sheet extends FrameLayout {
         row.setFocusable(true);
         row.setClickable(true);
         row.setBackground(rowBackground(c));
+        row.setOutlineProvider(Ui.rounded(Ui.dp(c, 14)));
         int icon = Ui.dp(c, 22);
         if (glyph != 0) {
             ImageView g = new ImageView(c);

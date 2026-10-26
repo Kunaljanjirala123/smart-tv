@@ -83,7 +83,7 @@ final class Stage extends FrameLayout {
 
         Layer(Context c) {
             super(c);
-            glowPaint.setAlpha(0xE6);
+            glowPaint.setAlpha(0xF2);
         }
 
         /** Fade each bitmap by itself instead of through a full-width offscreen buffer. */
@@ -104,9 +104,10 @@ final class Stage extends FrameLayout {
         protected void onDraw(Canvas c) {
             if (art == null) return;
             float cx = getWidth() / 2f, cy = (getHeight() - captionSpace) / 2f;
-            glow.set(cx - artW * 0.78f, cy - artH * 0.86f, cx + artW * 0.78f, cy + artH * 0.86f);
-            c.drawBitmap(art.glow, null, glow, glowPaint);
             dst.set(cx - artW / 2f, cy - artH / 2f, cx + artW / 2f, cy + artH / 2f);
+            glow.set(dst);
+            glow.inset(-art.glowPad, -art.glowPad);
+            c.drawBitmap(art.glow, null, glow, glowPaint);
             c.drawBitmap(art.art, null, dst, paint);
         }
     }

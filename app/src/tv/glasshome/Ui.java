@@ -2,8 +2,11 @@ package tv.glasshome;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.util.TypedValue;
+import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
@@ -20,6 +23,26 @@ final class Ui {
     /** A small, springy overshoot for things that grow into focus. */
     static final Interpolator POP = new OvershootInterpolator(1.4f);
     static final Interpolator EASE = new DecelerateInterpolator(1.6f);
+
+    /**
+     * Shadows follow a view's outline. Pills, circles and glass have no shaped background to take
+     * one from (or one the renderer reads as a rectangle), so they say their shape here.
+     */
+    static final ViewOutlineProvider PILL = new ViewOutlineProvider() {
+        @Override
+        public void getOutline(View v, Outline o) {
+            o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), Math.min(v.getWidth(), v.getHeight()) / 2f);
+        }
+    };
+
+    static ViewOutlineProvider rounded(final float radius) {
+        return new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), radius);
+            }
+        };
+    }
 
     private Ui() {}
 

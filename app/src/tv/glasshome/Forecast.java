@@ -33,9 +33,9 @@ final class Forecast {
         now.setGravity(Gravity.CENTER_VERTICAL);
         ImageView g = new ImageView(c);
         g.setImageDrawable(new Glyph(Weather.glyph(r.code, r.day), t.panelText, sun));
-        int gs = Ui.dp(c, 60);
+        int gs = Ui.dp(c, 50);
         now.addView(g, new LinearLayout.LayoutParams(gs, gs));
-        TextView temp = Ui.text(c, 54, t.panelText, Ui.THIN);
+        TextView temp = Ui.text(c, 46, t.panelText, Ui.THIN);
         temp.setText(r.temp + "°");
         temp.setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 16), 0);
         now.addView(temp);
@@ -67,9 +67,9 @@ final class Forecast {
                 cell.addView(when);
                 ImageView hg = new ImageView(c);
                 hg.setImageDrawable(new Glyph(Weather.glyph(h.code, h.day), t.panelText, sun));
-                int s = Ui.dp(c, 26);
+                int s = Ui.dp(c, 24);
                 LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(s, s);
-                gl.topMargin = gl.bottomMargin = Ui.dp(c, 7);
+                gl.topMargin = gl.bottomMargin = Ui.dp(c, 5);
                 cell.addView(hg, gl);
                 TextView ht = Ui.text(c, 17, t.panelText, Ui.REGULAR);
                 ht.setText(h.temp + "°");
@@ -92,8 +92,8 @@ final class Forecast {
                 LinearLayout row = new LinearLayout(c);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, Ui.dp(c, 5), 0, Ui.dp(c, 5));
-                TextView name = Ui.text(c, 17, t.panelText, Ui.REGULAR);
+                row.setPadding(0, Ui.dp(c, 3), 0, Ui.dp(c, 3));
+                TextView name = Ui.text(c, 16, t.panelText, Ui.REGULAR);
                 name.setText(i == 0 ? "Today" : DateUtils.formatDateTime(c, d.date + 12 * 3_600_000L,
                         DateUtils.FORMAT_SHOW_WEEKDAY | DateUtils.FORMAT_ABBREV_WEEKDAY));
                 row.addView(name, new LinearLayout.LayoutParams(Ui.dp(c, 92), -2));
@@ -121,7 +121,7 @@ final class Forecast {
         TextView h = Ui.text(c, 12, Theme.now.panelMuted, Ui.MEDIUM);
         h.setText(text);
         h.setLetterSpacing(0.08f);
-        h.setPadding(0, Ui.dp(c, 18), 0, Ui.dp(c, 10));
+        h.setPadding(0, Ui.dp(c, 14), 0, Ui.dp(c, 7));
         return h;
     }
 

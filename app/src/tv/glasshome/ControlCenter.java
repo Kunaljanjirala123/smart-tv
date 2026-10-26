@@ -69,6 +69,7 @@ final class ControlCenter extends FrameLayout {
         panel.glass().body = t.panelBody;
         int pad = Ui.dp(c, 22);
         panel.setPadding(pad, pad, pad, pad);
+        panel.setOutlineProvider(Ui.rounded(Ui.dp(c, 30)));
         LayoutParams plp = new LayoutParams(panelW, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END);
         int m = Ui.dp(c, 18);
         plp.setMargins(m, m, m, m);
@@ -88,6 +89,7 @@ final class ControlCenter extends FrameLayout {
         head.setFocusable(true);
         head.setClickable(true);
         head.setBackground(Sheet.rowBackground(c));
+        head.setOutlineProvider(Ui.rounded(Ui.dp(c, 14)));
         head.setOnClickListener(v -> host.profileMenu());
         lift(head, 1.02f);
         int as = Ui.dp(c, 52);
@@ -147,6 +149,8 @@ final class ControlCenter extends FrameLayout {
             rr.setOrientation(LinearLayout.HORIZONTAL);
             rr.setClipChildren(false);
             rr.setPadding(Ui.dp(c, 4), 0, 0, 0);
+            // Padding would otherwise clip a recent app as it grows into focus.
+            rr.setClipToPadding(false);
             for (int i = 0; i < recents.size(); i++) {
                 final Catalog.Item it = recents.get(i);
                 final Tile tile = new Tile(c, it, tileW, tileH, false);
@@ -188,6 +192,7 @@ final class ControlCenter extends FrameLayout {
         bg.setEnterFadeDuration(110);
         bg.setExitFadeDuration(150);
         v.setBackground(bg);
+        v.setOutlineProvider(Ui.rounded(Ui.dp(c, 16)));
         v.setElevation(Ui.dp(c, 1));
         ImageView g = new ImageView(c);
         g.setImageDrawable(new Glyph(b.glyph, t.panelText));

@@ -98,7 +98,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private String lastFocusId, stageWant, movingId, netLabel = "Offline", netSub = "Not connected";
     private int netGlyphKind = Glyph.WIFI_OFF;
     private int pageH, screenW, side, perRow, dockN, dockW, dockH, gridW, gridH, artW, artH, stageW, stageH;
-    private boolean resumed, pendingRecreate, useLens;
+    private boolean resumed, pendingRecreate, useLens, timeWatched;
 
     private final BroadcastReceiver time = new BroadcastReceiver() {
         @Override
@@ -174,6 +174,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         f.addAction(Intent.ACTION_TIME_CHANGED);
         f.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         registerReceiver(time, f);
+        timeWatched = true;
         tick();
         updateNetwork();
         refreshWeather(false);
@@ -189,7 +190,9 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     protected void onPause() {
         super.onPause();
         resumed = false;
-        unregisterReceiver(time);
+        // onResume returns early when it recreates for a new theme, before watching the time.
+        if (timeWatched) unregisterReceiver(time);
+        timeWatched = false;
         ui.removeCallbacks(weatherTick);
         if (movingId != null) endMove();
     }
@@ -396,6 +399,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         grid.setPadding(side, 0, side, Ui.dp(this, 90));
+        grid.setClipToPadding(false);
         grid.setTag(gridGap);
         column.addView(grid, new LinearLayout.LayoutParams(-1, -2));
 
@@ -428,7 +432,9 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(side, Ui.dp(this, 24), side, 0);
+        // Padding would otherwise clip the pills as they grow into focus.
         bar.setClipChildren(false);
+        bar.setClipToPadding(false);
 
         // Weather ---------------------------------------------------------------
         LinearLayout w = new LinearLayout(this);
@@ -503,6 +509,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
             g.glass().body = Theme.now.pill;
             f = g;
         }
+        f.setOutlineProvider(Ui.PILL);
         f.setPadding(padH, padV, padH + Ui.dp(this, 4), padV);
         f.addView(inside, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_VERTICAL));
         f.setFocusable(true);
@@ -516,6 +523,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private View roundButton(int glyph, View.OnClickListener click) {
         Glass.Frame f = new Glass.Frame(this, 26);
         f.glass().body = Theme.now.pill;
+        f.setOutlineProvider(Ui.PILL);
         ImageView g = new ImageView(this);
         g.setImageDrawable(new Glyph(glyph, Theme.now.pillText));
         int gs = Ui.dp(this, 22);
@@ -1282,6 +1290,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         g.setOrientation(LinearLayout.VERTICAL);
         g.setClipChildren(false);
         g.setPadding(Ui.dp(this, 4), Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 4));
+        g.setClipToPadding(false);
         LinearLayout row = null;
         for (int i = 0; i < folder.members.size(); i++) {
             if (i % cols == 0) {
@@ -1373,20 +1382,73 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         String sub = r == null ? "Getting the weather…"
                 : "Updated " + DateFormat.format(DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm a", r.fetched)
                 + "  ·  Open-Meteo";
-        Sheet s = new Sheet(this, prefs.place(), sub).width(640);
-        if (r != null) s.view(Forecast.view(this, r));
-        s.more("Location", prefs::place, this::placeSearch);
-        s.option("Units", () -> prefs.fahrenheit() ? "Fahrenheit (°F)" : "Celsius (°C)", () -> {
+        final Sheet s = new Sheet(this, prefs.place(), sub).width(660);
+        // The actions sit in one row of chips under the forecast, so all of it fits on screen.
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setClipChildren(false);
+        actions.setPadding(0, Ui.dp(this, 6), 0, 0);
+        actions.addView(chip(Glyph.PIN, "Change Location", v -> {
+            s.close();
+            placeSearch();
+        }));
+        actions.addView(chip(0, prefs.fahrenheit() ? "Show °C" : "Show °F", v -> {
             prefs.set("fahrenheit", !prefs.fahrenheit());
             report = null;
+            s.close();
             refreshWeather(true);
-        });
-        s.add("Hide the Weather", () -> {
+        }));
+        actions.addView(chip(Glyph.CLOSE, "Hide Weather", v -> {
+            s.close();
             prefs.set("weather_on", false);
             updateWeatherPill();
             Toast.makeText(this, "Turn it back on in Settings > Weather", Toast.LENGTH_LONG).show();
-        });
+        }));
+        if (r != null) s.view(Forecast.view(this, r));
+        s.view(actions);
         open(s);
+    }
+
+    /** A small lit button for a row of actions inside a menu. */
+    private View chip(int glyph, String label, View.OnClickListener click) {
+        Theme t = Theme.now;
+        LinearLayout v = new LinearLayout(this);
+        v.setOrientation(LinearLayout.HORIZONTAL);
+        v.setGravity(Gravity.CENTER_VERTICAL);
+        int h = Ui.dp(this, 16);
+        v.setPadding(h, Ui.dp(this, 10), h + Ui.dp(this, 2), Ui.dp(this, 10));
+        v.setFocusable(true);
+        v.setClickable(true);
+        GradientDrawable on = new GradientDrawable();
+        on.setCornerRadius(Ui.dp(this, 22));
+        on.setColor(t.rowFocus);
+        on.setStroke(Ui.dp(this, 1), t.rowFocusRim);
+        GradientDrawable off = new GradientDrawable();
+        off.setCornerRadius(Ui.dp(this, 22));
+        off.setColor(t.light ? 0x12000000 : 0x1AFFFFFF);
+        android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
+        bg.addState(new int[] {android.R.attr.state_focused}, on);
+        bg.addState(new int[] {}, off);
+        v.setBackground(bg);
+        v.setOutlineProvider(Ui.PILL);
+        if (glyph != 0) {
+            ImageView g = new ImageView(this);
+            g.setImageDrawable(new Glyph(glyph, t.panelText));
+            int gs = Ui.dp(this, 18);
+            LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(gs, gs);
+            gl.rightMargin = Ui.dp(this, 8);
+            v.addView(g, gl);
+        }
+        TextView l = Ui.text(this, 16, t.panelText, Ui.MEDIUM);
+        l.setText(label);
+        v.addView(l);
+        v.setOnClickListener(click);
+        v.setOnFocusChangeListener((x, has) -> x.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f)
+                .translationZ(has ? Ui.dp(this, 4) : 0f).setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(200).start());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.rightMargin = Ui.dp(this, 12);
+        v.setLayoutParams(lp);
+        return v;
     }
 
     private void placeSearch() {
@@ -1558,6 +1620,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         g.setOrientation(LinearLayout.VERTICAL);
         g.setClipChildren(false);
         g.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 6));
+        g.setClipToPadding(false);
         LinearLayout row = null;
         for (int i = 0; i < Prefs.AVATARS.length; i++) {
             if (i % 6 == 0) {

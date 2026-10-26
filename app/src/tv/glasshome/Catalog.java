@@ -55,13 +55,18 @@ final class Catalog {
         }
     }
 
-    /** What the stage shows for an app: its banner (or icon tile) and a small, blurred copy for the glow. */
+    /**
+     * What the stage shows for an app: its banner (or icon tile), and a small, blurred copy for
+     * the glow that reaches {@code glowPad} art pixels beyond the art on every side.
+     */
     static final class StageArt {
         final Bitmap art, glow;
+        final float glowPad;
 
-        StageArt(Bitmap art, Bitmap glow) {
+        StageArt(Bitmap art, Bitmap glow, float glowPad) {
             this.art = art;
             this.glow = glow;
+            this.glowPad = glowPad;
         }
     }
 
@@ -269,7 +274,15 @@ final class Catalog {
             c.drawRoundRect(new RectF(0, 0, w, h), r, r, p);
             tile.recycle();
         }
-        return new StageArt(art, Backdrop.blur(art, 6, 3));
+        // The glow: a small copy with room around it to spread into, blurred hard, so it fades to
+        // nothing at its edges and sits exactly behind the art (no offset ghosts of the logo).
+        int sw = Math.max(8, w / 8), sh = Math.max(8, h / 8), pad = Math.round(sh * 0.7f);
+        Bitmap small = Bitmap.createBitmap(sw + 2 * pad, sh + 2 * pad, Bitmap.Config.ARGB_8888);
+        new Canvas(small).drawBitmap(art, null, new RectF(pad, pad, pad + sw, pad + sh),
+                new Paint(Paint.FILTER_BITMAP_FLAG));
+        Bitmap glow = Backdrop.blur(small, 1, Math.max(2, sh / 5));
+        small.recycle();
+        return new StageArt(art, glow, pad * (float) w / sw);
     }
 
     /** Fades the outer edges, so the banner melts into its own glow instead of ending in a hard box. */

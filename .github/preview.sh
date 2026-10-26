@@ -49,16 +49,21 @@ sleep 8
 shot 06-home
 key DPAD_RIGHT 1.5; shot 07-dock-2
 key DPAD_RIGHT 1.5; shot 08-dock-3
-key DPAD_DOWN 1.8; shot 09-apps
+# The emulator's five apps all fit in the dock: take the last two out, so the apps page has some.
+key DPAD_RIGHT 0.8; key DPAD_RIGHT 0.8
+key MENU 1.2; key DPAD_DOWN 0.5; key DPAD_DOWN 0.5; key DPAD_CENTER 2
+key DPAD_UP 1.5
+key MENU 1.2; key DPAD_DOWN 0.5; key DPAD_DOWN 0.5; key DPAD_CENTER 2.5
+shot 09-apps
 key MENU 1.5; shot 10-app-menu
 key DPAD_DOWN 0.6; key DPAD_CENTER 1.5; shot 11-moving
 key DPAD_RIGHT 1.5; shot 12-moved
 key DPAD_CENTER 1.5
-# Into a new folder.
+# Into a new folder: Open, Move, Add to Dock, Move to Folder...
 key MENU 1.2; key DPAD_DOWN 0.5; key DPAD_DOWN 0.5; key DPAD_DOWN 0.5; key DPAD_CENTER 1.5; shot 13-folder-picker
 key DPAD_CENTER 1.5
 adb shell input text "Games"; sleep 0.8
-key ENTER 2; key BACK 1; shot 14-folder-tile
+key ENTER 2.5; shot 14-folder-tile
 key DPAD_CENTER 1.5; shot 15-folder-open
 key BACK 1.5
 key BACK 1.5

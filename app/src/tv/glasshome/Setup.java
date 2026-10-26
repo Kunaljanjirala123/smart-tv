@@ -57,6 +57,7 @@ final class Setup extends FrameLayout {
         card.glass().body = Theme.now.panelBody;
         int pad = Ui.dp(c, 34);
         card.setPadding(pad, Ui.dp(c, 30), pad, Ui.dp(c, 28));
+        card.setOutlineProvider(Ui.rounded(Ui.dp(c, 34)));
         body = new LinearLayout(c);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setClipChildren(false);
@@ -95,6 +96,7 @@ final class Setup extends FrameLayout {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setClipChildren(false);
         row.setPadding(0, Ui.dp(getContext(), 26), 0, 0);
+        row.setClipToPadding(false);
         View chosen = null;
         for (String id : Theme.CHOICES) {
             View v = swatch(id);
@@ -138,6 +140,7 @@ final class Setup extends FrameLayout {
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         grid.setPadding(0, Ui.dp(c, 18), 0, Ui.dp(c, 6));
+        grid.setClipToPadding(false);
         View chosen = null;
         LinearLayout row = null;
         for (int i = 0; i < Prefs.AVATARS.length; i++) {
