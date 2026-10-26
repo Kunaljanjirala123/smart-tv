@@ -13,9 +13,7 @@ import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 
@@ -27,9 +25,10 @@ import android.view.accessibility.AccessibilityEvent;
  * home window and replaces it. A plain startActivity after a HOME press is held back by Android's
  * five-second app-switch delay; an alarm-fired PendingIntent is sent by system_server, which is
  * exempt, and fires at once with {@code min_futurity=0} (set by the installer). Android 11 also
- * refuses an activity start from an app with no visible window, so a plain cover overlay is shown
- * first and the launch goes out from its first draw. The cover also hides Amazon's home, so it
- * never flashes on screen.
+ * refuses an activity start from an app with no visible window, so a plain cover overlay stays
+ * added at zero alpha (still a visible window, though SurfaceFlinger skips drawing it): covering
+ * is a single alpha change and the launch goes out at the same moment. The cover also hides
+ * Amazon's home, so it never flashes on screen.
  */
 public final class Guard extends AccessibilityService {
     static final String AMAZON = "com.amazon.tv.launcher";
@@ -37,17 +36,15 @@ public final class Guard extends AccessibilityService {
     private static final int COVER_COLOR = 0xFF070912;
     private static final long COVER_MAX_MS = 1500;
     private static final long REPEAT_MS = 1000;
-    private static final long LAUNCH_FALLBACK_MS = 150;
 
     private static volatile boolean paused;
     private static Guard running;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable uncover = this::uncover;
-    private final Runnable launch = () -> home(this);
     private View cover;
+    private WindowManager.LayoutParams coverLp;
     private Volume volume;
-    private boolean ownsVolumeKey;
     private long lastLaunch;
     private boolean onAmazonHome;
     private final BroadcastReceiver screenOn = new BroadcastReceiver() {
@@ -102,7 +99,7 @@ public final class Guard extends AccessibilityService {
     protected void onServiceConnected() {
         running = this;
         View view = new View(this);
-        view.setVisibility(View.GONE);
+        view.setBackgroundColor(COVER_COLOR);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -111,6 +108,8 @@ public final class Guard extends AccessibilityService {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         lp.windowAnimations = 0;
+        lp.alpha = 0f;
+        coverLp = lp;
         // The service can be re-bound while it is still starting (the installer switches it off
         // and on); the old connection's window token is then gone, so go on without the cover.
         try {
@@ -122,27 +121,12 @@ public final class Guard extends AccessibilityService {
         registerReceiver(screenOn, new IntentFilter(Intent.ACTION_SCREEN_ON));
         Volume.enabled = new Prefs(this).glassVolume();
         volume = new Volume(this);
-    }
-
-    /**
-     * Every remote key passes through here (guard.xml asks to filter key events): volume keys go
-     * to the glass volume bar, everything else straight back to the system with no work done.
-     */
-    @Override
-    protected boolean onKeyEvent(KeyEvent e) {
-        int code = e.getKeyCode();
-        if (code != KeyEvent.KEYCODE_VOLUME_UP && code != KeyEvent.KEYCODE_VOLUME_DOWN
-                && code != KeyEvent.KEYCODE_VOLUME_MUTE) return false;
-        if (volume == null) return false;
-        // The release follows whatever happened to its press.
-        if (e.getAction() == KeyEvent.ACTION_DOWN) ownsVolumeKey = volume.press(code, e.getRepeatCount());
-        return ownsVolumeKey;
+        volume.listen();
     }
 
     @Override
     public void onDestroy() {
         handler.removeCallbacks(uncover);
-        handler.removeCallbacks(launch);
         try {
             unregisterReceiver(screenOn);
         } catch (IllegalArgumentException ignored) {
@@ -159,14 +143,20 @@ public final class Guard extends AccessibilityService {
         CharSequence pkg = e.getPackageName(), cls = e.getClassName();
         if (pkg == null) return;
         if (!AMAZON.contentEquals(pkg)) {
-            if ("com.android.systemui".contentEquals(pkg) || "android".contentEquals(pkg)) return;
+            if ("com.android.systemui".contentEquals(pkg)) {
+                // Amazon's volume bar opening: cover it with the glass one straight away.
+                if (volume != null && cls != null && cls.toString().contains("VolumeDialog")) volume.amazonShown();
+                return;
+            }
+            if ("android".contentEquals(pkg)) return;
             onAmazonHome = false;
             paused = false;
             if (!getPackageName().contentEquals(pkg)) arrived(this);
             return;
         }
         onAmazonHome = cls != null && AMAZON_HOME.contentEquals(cls);
-        if (paused || !onAmazonHome) return;
+        // Glass Home already in front of it: nothing to replace, and no cover to flash.
+        if (paused || !onAmazonHome || Home.showing) return;
         long now = SystemClock.uptimeMillis();
         if (now - lastLaunch < REPEAT_MS) return;
         lastLaunch = now;
@@ -174,41 +164,28 @@ public final class Guard extends AccessibilityService {
     }
 
     private void launchWhenCovered() {
-        handler.removeCallbacks(launch);
-        if (cover == null) {
-            home(this);
-            return;
-        }
-        boolean shown = cover.getVisibility() == View.VISIBLE;
         cover();
-        if (shown) {
-            home(this);
-            return;
-        }
-        final ViewTreeObserver observer = cover.getViewTreeObserver();
-        observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-            @Override
-            public boolean onPreDraw() {
-                cover.getViewTreeObserver().removeOnPreDrawListener(this);
-                handler.removeCallbacks(launch);
-                home(Guard.this);
-                return true;
-            }
-        });
-        handler.postDelayed(launch, LAUNCH_FALLBACK_MS);
+        home(this);
     }
 
     private void cover() {
-        if (cover == null) return;
-        cover.setBackgroundColor(COVER_COLOR);
-        cover.setVisibility(View.VISIBLE);
         handler.removeCallbacks(uncover);
         handler.postDelayed(uncover, COVER_MAX_MS);
+        setCoverAlpha(1f);
     }
 
     private void uncover() {
         handler.removeCallbacks(uncover);
-        if (cover != null) cover.setVisibility(View.GONE);
+        setCoverAlpha(0f);
+    }
+
+    private void setCoverAlpha(float a) {
+        if (cover == null || coverLp.alpha == a) return;
+        coverLp.alpha = a;
+        try {
+            ((WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(cover, coverLp);
+        } catch (IllegalArgumentException ignored) {
+        }
     }
 
     @Override

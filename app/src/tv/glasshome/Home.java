@@ -70,6 +70,10 @@ public final class Home extends Activity {
     private String lastFocusId;
     private int pageH, artW, artH, dockW, dockH, gap, side;
     private boolean resumed;
+    /** Whether the home screen is in front, for Guard. */
+    static volatile boolean showing;
+    /** True while focus is being put back on return from an app: the page and lens jump, not glide. */
+    private boolean jump;
 
     private final BroadcastReceiver time = new BroadcastReceiver() {
         @Override
@@ -120,6 +124,14 @@ public final class Home extends Activity {
         /** Where the page is heading, in pixels from the top. */
         int target() {
             return Math.round(spring.target[0]);
+        }
+
+        /** Jumps straight to {@code y}: coming back from an app should not show a scroll. */
+        void snapTo(int y) {
+            spring.target[0] = y;
+            spring.snap();
+            if (getChildCount() > 0) getChildAt(0).setTranslationY(-y);
+            Glass.invalidateAll();
         }
 
         void glideTo(int y) {
@@ -179,6 +191,7 @@ public final class Home extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        showing = true;
         Guard.arrived(this);
         IntentFilter f = new IntentFilter(Intent.ACTION_TIME_TICK);
         f.addAction(Intent.ACTION_TIME_CHANGED);
@@ -188,7 +201,9 @@ public final class Home extends Activity {
         updateNetwork();
         ui.removeCallbacks(memoryTick);
         memoryTick.run();
+        jump = true;
         restoreFocus();
+        jump = false;
     }
 
     @Override
@@ -200,6 +215,7 @@ public final class Home extends Activity {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        showing = false;
         unregisterReceiver(time);
         ui.removeCallbacks(memoryTick);
     }
@@ -217,12 +233,17 @@ public final class Home extends Activity {
         super.onDestroy();
     }
 
-    /** HOME while already home: back to the first dock app, menus closed. */
+    /**
+     * HOME: back to the first dock app, menus closed. From an app it jumps there, so the home
+     * screen appears already in place; pressed on the home screen itself it glides.
+     */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (sheet != null) sheet.close();
+        jump = !resumed;
         focusDock(0);
+        jump = false;
     }
 
     @Override
@@ -293,12 +314,12 @@ public final class Home extends Activity {
         pills.setClipChildren(false);
         pills.addView(pill("Inputs", v -> inputsMenu()));
         network = pillText();
-        pills.addView(pill(network, v -> openSettings()));
+        pills.addView(pill(network, v -> openScreen(NETWORK)));
         ram = pillText();
         // Wide enough for any reading, so the pills beside it never shift as it changes.
         ram.setMinWidth(Ui.dp(this, 132));
         pills.addView(pill(ram, v -> freeMemory()));
-        pills.addView(pill("Settings", v -> openSettings()));
+        pills.addView(pill("Settings", v -> quickSettings()));
         pills.addView(pill("Edit", v -> editMenu()));
         top.addView(pills, new LinearLayout.LayoutParams(-2, -2));
         page.addView(top, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
@@ -511,7 +532,7 @@ public final class Home extends Activity {
             tmp.set(0, 0, 0, 0);
             content.offsetDescendantRectToMyCoords(t, tmp);
             rect.set(tmp.left + cx - hw, tmp.top + cy - hh, tmp.left + cx + hw, tmp.top + cy + hh);
-            lens.moveTo(rect);
+            lens.moveTo(rect, jump);
             boolean inDock = t.getParent() == dockRow;
             if (inDock) showHero(t);
             else hero.animate().alpha(0f).setDuration(150).withLayer().start();
@@ -553,7 +574,8 @@ public final class Home extends Activity {
     }
 
     private void scrollTo(int y) {
-        pager.glideTo(y);
+        if (jump) pager.snapTo(y);
+        else pager.glideTo(y);
     }
 
     private void restoreFocus() {
@@ -624,7 +646,14 @@ public final class Home extends Activity {
             NetworkCapabilities caps = cm.getNetworkCapabilities(cm.getActiveNetwork());
             if (caps != null) {
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) label = "Ethernet";
-                else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) label = "Wi-Fi";
+                else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    label = "Wi-Fi";
+                    // The signal (RSSI) comes with the capabilities on Android 10+, no permission needed.
+                    int rssi = android.os.Build.VERSION.SDK_INT >= 29 ? caps.getSignalStrength()
+                            : NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED;
+                    if (rssi != NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED)
+                        label += rssi >= -55 ? " · strong" : rssi >= -70 ? " · good" : " · weak";
+                }
                 else label = "Online";
                 if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) label += " · no internet";
             }
@@ -700,6 +729,38 @@ public final class Home extends Activity {
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "Settings could not be opened", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // Settings screens Fire OS lets any app open straight away (exported, no permission, checked on
+    // Fire OS 8.1). Display, sound and picture are Amazon-only, so they go through All settings.
+    private static final String SETTINGS_APP = "com.amazon.tv.settings.v2";
+    private static final String NETWORK = SETTINGS_APP + ".tv.network.NetworkActivity";
+    private static final String REMOTES = SETTINGS_APP + ".tv.controllers_bluetooth_devices.ControllersAndBluetoothActivity";
+    private static final String SOUNDBAR = SETTINGS_APP + ".tv.display_sounds.soundbar.SoundbarActivity";
+    private static final String APPS = SETTINGS_APP + ".tv.applications.ApplicationsActivity";
+    private static final String DEVICE = SETTINGS_APP + ".tv.device.DeviceActivity";
+
+    /** One settings screen, with no transition; the full settings menu if this TV lacks it. */
+    private void openScreen(String activity) {
+        try {
+            startActivity(new Intent().setClassName(SETTINGS_APP, activity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
+        } catch (ActivityNotFoundException | SecurityException e) {
+            openSettings();
+        }
+    }
+
+    private void quickSettings() {
+        Sheet s = new Sheet(this, "Settings", network.getText());
+        s.add("Wi-Fi and network", () -> openScreen(NETWORK));
+        s.add("Remotes and Bluetooth", () -> openScreen(REMOTES));
+        s.add("Soundbar", () -> openScreen(SOUNDBAR));
+        s.add("Inputs (HDMI)", () -> ui.postDelayed(this::inputsMenu, 180));
+        s.add("Apps", () -> openScreen(APPS));
+        s.add("Free up memory", this::freeMemory);
+        s.add("Sleep, restart and about", () -> openScreen(DEVICE));
+        s.add("All settings: picture, display, sound", this::openSettings);
+        open(s);
     }
 
     // ---------------------------------------------------------------- menus
