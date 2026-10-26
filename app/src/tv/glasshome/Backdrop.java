@@ -200,6 +200,12 @@ final class Backdrop {
             setAlpha(0f);
         }
 
+        /** One gradient: fading it needs no offscreen buffer. */
+        @Override
+        public boolean hasOverlappingRendering() {
+            return false;
+        }
+
         void setColour(int c) {
             if (c == colour && paint.getShader() != null) return;
             colour = c;

@@ -336,7 +336,13 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
             washes[i] = new Backdrop.Wash(this);
             root.addView(washes[i], new FrameLayout.LayoutParams(-1, -1));
         }
-        scrim = new View(this);
+        // A single fill, faded as the page scrolls: no offscreen buffer needed.
+        scrim = new View(this) {
+            @Override
+            public boolean hasOverlappingRendering() {
+                return false;
+            }
+        };
         scrim.setBackgroundColor(t.appsScrim);
         scrim.setAlpha(0f);
         root.addView(scrim, new FrameLayout.LayoutParams(-1, -1));

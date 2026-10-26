@@ -11,9 +11,9 @@ import android.widget.TextView;
 
 /**
  * The top shelf: the focused dock app's banner, large, in the middle of the first screen and
- * glowing with its own colours, with its name underneath. A change of app crossfades two layers
- * (alpha and scale are render-node properties, drawn from a hardware layer while they move), so
- * the art is never redrawn during the transition.
+ * glowing with its own colours, with its name underneath. A change of app crossfades two layers;
+ * alpha and scale are render-node properties applied to each bitmap as it is drawn, so the art is
+ * never redrawn and no offscreen buffer is needed during the transition.
  */
 final class Stage extends FrameLayout {
     private final Layer[] layers = new Layer[2];
@@ -64,9 +64,9 @@ final class Stage extends FrameLayout {
         in.setAlpha(0f);
         in.setScaleX(0.94f);
         in.setScaleY(0.94f);
-        in.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(460).setInterpolator(Ui.EASE).withLayer().start();
+        in.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(460).setInterpolator(Ui.EASE).start();
         out.animate().cancel();
-        out.animate().alpha(0f).scaleX(1.04f).scaleY(1.04f).setDuration(280).setInterpolator(Ui.EASE).withLayer().start();
+        out.animate().alpha(0f).scaleX(1.04f).scaleY(1.04f).setDuration(280).setInterpolator(Ui.EASE).start();
         caption.animate().cancel();
         caption.setText(it.label);
         caption.setAlpha(0f);
@@ -84,6 +84,12 @@ final class Stage extends FrameLayout {
         Layer(Context c) {
             super(c);
             glowPaint.setAlpha(0xE6);
+        }
+
+        /** Fade each bitmap by itself instead of through a full-width offscreen buffer. */
+        @Override
+        public boolean hasOverlappingRendering() {
+            return false;
         }
 
         @Override

@@ -43,7 +43,8 @@ final class Ui {
     static int glow(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
-        hsv[1] = Math.min(1f, hsv[1] * 1.35f + 0.1f);
+        // Greys and whites stay neutral rather than picking up the hue of their rounding error.
+        hsv[1] = hsv[1] < 0.08f ? 0f : Math.min(1f, hsv[1] * 1.35f + 0.1f);
         hsv[2] = Math.max(0.75f, hsv[2]);
         return Color.HSVToColor(0xFF, hsv);
     }
