@@ -529,9 +529,24 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         f.setFocusable(true);
         f.setClickable(true);
         f.setOnClickListener(click);
-        f.setOnFocusChangeListener((v, has) -> v.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
-                .translationZ(has ? Ui.dp(this, 8) : 0f).setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(240).start());
+        f.setOnFocusChangeListener((v, has) -> {
+            // Only the solid card lifts with a shadow: under see-through glass a shadow shows as a box.
+            v.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
+                    .translationZ(has && solid ? Ui.dp(this, 8) : 0f)
+                    .setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(240).start();
+            if (v instanceof Glass.Frame) lightGlass((Glass.Frame) v, has);
+        });
         return f;
+    }
+
+    /** Focused glass brightens instead of casting a shadow: a denser body and a full rim. */
+    private static void lightGlass(Glass.Frame f, boolean on) {
+        Theme t = Theme.now;
+        f.glass().body = on ? (t.light ? 0x80000000 : 0x4DFFFFFF) : t.pill;
+        f.glass().rimTop = on ? 0xFF : t.rimTop;
+        f.glass().rimBottom = on ? 0x80 : t.rimBottom;
+        f.glass().invalidateShaders();
+        f.invalidate();
     }
 
     private View roundButton(int glyph, View.OnClickListener click) {
@@ -545,8 +560,11 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         f.setFocusable(true);
         f.setClickable(true);
         f.setOnClickListener(click);
-        f.setOnFocusChangeListener((v, has) -> v.animate().scaleX(has ? 1.12f : 1f).scaleY(has ? 1.12f : 1f)
-                .translationZ(has ? Ui.dp(this, 8) : 0f).setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(240).start());
+        f.setOnFocusChangeListener((v, has) -> {
+            v.animate().scaleX(has ? 1.12f : 1f).scaleY(has ? 1.12f : 1f)
+                    .setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(240).start();
+            lightGlass((Glass.Frame) v, has);
+        });
         int s = Ui.dp(this, 52);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(s, s);
         lp.leftMargin = Ui.dp(this, 12);
@@ -1459,7 +1477,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         v.addView(l);
         v.setOnClickListener(click);
         v.setOnFocusChangeListener((x, has) -> x.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f)
-                .translationZ(has ? Ui.dp(this, 4) : 0f).setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(200).start());
+                .translationZ(has && t.light ? Ui.dp(this, 4) : 0f).setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(200).start());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.rightMargin = Ui.dp(this, 12);
         v.setLayoutParams(lp);

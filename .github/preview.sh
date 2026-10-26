@@ -72,6 +72,9 @@ key DPAD_DOWN 0.8; key DPAD_DOWN 0.8; key DPAD_DOWN 0.8; key DPAD_DOWN 0.8; key 
 key BACK 1.5
 home --es open weather; sleep 2.5; shot 18-weather
 key BACK 1.5
+key DPAD_UP 1.2; shot 18b-status-focus
+key DPAD_RIGHT 1.2; shot 18c-status-focus
+key DPAD_DOWN 1.2
 home --es open settings; sleep 2.5; shot 19-settings
 key BACK 1.5
 

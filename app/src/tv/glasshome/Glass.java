@@ -74,6 +74,11 @@ final class Glass {
         c.drawRoundRect(r, radius - in, radius - in, rim);
     }
 
+    /** Call after changing the sheen or rim alphas, so their gradients are rebuilt. */
+    void invalidateShaders() {
+        lastH = -1;
+    }
+
     /** Redraws every glass surface; call when content moves under them. */
     static void invalidateAll() {
         for (Frame f : live) f.invalidate();

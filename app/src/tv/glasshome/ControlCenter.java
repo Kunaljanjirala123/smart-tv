@@ -192,9 +192,8 @@ final class ControlCenter extends FrameLayout {
         bg.setEnterFadeDuration(110);
         bg.setExitFadeDuration(150);
         v.setBackground(bg);
+        // Only the opaque, lit light-theme button lifts with a shadow (see lift()).
         v.setOutlineProvider(Ui.rounded(Ui.dp(c, 16)));
-        // Shadows only under the opaque light-theme buttons; under translucent glass they show through.
-        if (t.light) v.setElevation(Ui.dp(c, 1));
         ImageView g = new ImageView(c);
         g.setImageDrawable(new Glyph(b.glyph, t.panelText));
         int gs = Ui.dp(c, 22);
