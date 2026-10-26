@@ -61,6 +61,13 @@ for ($i = 0; $i -lt 15; $i++) {
   Start-Sleep 1
 }
 if ($bound) { Ok 'HOME button: Glass Home' } else { Warn 'Fire OS has not confirmed the HOME helper yet; press HOME on the remote to check.' }
+# ---- the clock screensaver (Amazon's is remembered, so Uninstall-GlassHome puts it back)
+Say 'Clock screensaver'
+$saver = Sh 'settings get secure screensaver_components'
+if ($saver -notlike "$Pkg/*") { Sh "settings put global glasshome_screensaver $saver" | Out-Null }
+Sh "settings put secure screensaver_components $Pkg/.Clock" | Out-Null
+Sh 'settings put secure screensaver_enabled 1' | Out-Null
+Ok 'screensaver: Glass Home clock'
 Sh 'input keyevent KEYCODE_WAKEUP' | Out-Null
 Sh "am start -n $Pkg/.Home" | Out-Null
 

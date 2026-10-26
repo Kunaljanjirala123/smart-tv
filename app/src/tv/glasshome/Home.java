@@ -1,6 +1,7 @@
 package tv.glasshome;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -62,7 +63,8 @@ public final class Home extends Activity {
     private Pager pager;
     private LinearLayout column, dockRow, grid;
     private Glass.Frame dockBand;
-    private TextView clock, date, hero, appsHeader, network;
+    private TextView clock, date, hero, appsHeader, network, ram;
+    private final ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
     private Lens lens;
     private Sheet sheet;
     private String lastFocusId;
@@ -83,6 +85,13 @@ public final class Home extends Activity {
         }
     };
     private final Runnable reload = this::reload;
+    private final Runnable memoryTick = new Runnable() {
+        @Override
+        public void run() {
+            updateMemory();
+            ui.postDelayed(this, 2000);
+        }
+    };
     private ConnectivityManager.NetworkCallback netCallback;
 
     /**
@@ -177,6 +186,8 @@ public final class Home extends Activity {
         registerReceiver(time, f);
         tick();
         updateNetwork();
+        ui.removeCallbacks(memoryTick);
+        memoryTick.run();
         restoreFocus();
     }
 
@@ -190,6 +201,7 @@ public final class Home extends Activity {
         super.onPause();
         resumed = false;
         unregisterReceiver(time);
+        ui.removeCallbacks(memoryTick);
     }
 
     @Override
@@ -282,6 +294,10 @@ public final class Home extends Activity {
         pills.addView(pill("Inputs", v -> inputsMenu()));
         network = pillText();
         pills.addView(pill(network, v -> openSettings()));
+        ram = pillText();
+        // Wide enough for any reading, so the pills beside it never shift as it changes.
+        ram.setMinWidth(Ui.dp(this, 132));
+        pills.addView(pill(ram, v -> freeMemory()));
         pills.addView(pill("Settings", v -> openSettings()));
         pills.addView(pill("Edit", v -> editMenu()));
         top.addView(pills, new LinearLayout.LayoutParams(-2, -2));
@@ -473,6 +489,9 @@ public final class Home extends Activity {
                     if (f instanceof Tile && ((Tile) f).item == it) showHero((Tile) f);
                 });
             }
+            // Each banner was decoded at full size (up to 1280x720) just to draw a small tile; free
+            // those copies now rather than leave tens of megabytes waiting on a 1.8 GB TV.
+            Runtime.getRuntime().gc();
         });
     }
 
@@ -495,13 +514,13 @@ public final class Home extends Activity {
             lens.moveTo(rect);
             boolean inDock = t.getParent() == dockRow;
             if (inDock) showHero(t);
-            else hero.animate().alpha(0f).setDuration(150).start();
+            else hero.animate().alpha(0f).setDuration(150).withLayer().start();
             if (inDock) scrollTo(0);
             else scrollToShow(tmp.top, tmp.top + t.getHeight());
         } else if (now.getParent() != null && isInside(now, column)) {
             // A pill at the top.
             lens.hide();
-            hero.animate().alpha(0f).setDuration(150).start();
+            hero.animate().alpha(0f).setDuration(150).withLayer().start();
             scrollTo(0);
         }
     }
@@ -519,7 +538,7 @@ public final class Home extends Activity {
             hero.animate().cancel();
             hero.setText(name);
             hero.setTranslationX(-Ui.dp(this, 10));
-            hero.animate().alpha(1f).translationX(0).setDuration(220).setInterpolator(EASE).start();
+            hero.animate().alpha(1f).translationX(0).setDuration(220).setInterpolator(EASE).withLayer().start();
         }
     }
 
@@ -612,6 +631,45 @@ public final class Home extends Activity {
         } catch (RuntimeException ignored) {
         }
         network.setText(label);
+    }
+
+    // ---------------------------------------------------------------- memory
+
+    /** Free memory, in amber when the TV is short of it. */
+    private void updateMemory() {
+        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am == null) return;
+        am.getMemoryInfo(memory);
+        long mb = memory.availMem >> 20;
+        String label = "RAM " + (mb >= 1024 ? (mb * 10 / 1024) / 10f + " GB" : (mb / 10 * 10) + " MB") + " free";
+        if (!label.contentEquals(ram.getText())) ram.setText(label);
+        ram.setTextColor(memory.lowMemory || mb < 200 ? 0xFFFFC46B : Ui.TEXT);
+    }
+
+    /** Closes apps left running in the background, then says how much memory came back. */
+    private void freeMemory() {
+        final ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am == null) return;
+        am.getMemoryInfo(memory);
+        final long before = memory.availMem;
+        final List<Catalog.Item> all = new ArrayList<>(apps);
+        ram.setText("Freeing…");
+        worker.execute(() -> {
+            for (Catalog.Item it : all) {
+                try {
+                    am.killBackgroundProcesses(it.id);
+                } catch (SecurityException ignored) {
+                }
+            }
+            // Give the system a moment to hand the memory back before measuring.
+            ui.postDelayed(() -> {
+                am.getMemoryInfo(memory);
+                long freed = (memory.availMem - before) >> 20;
+                Toast.makeText(this, freed >= 10 ? "Freed " + freed + " MB" : "Nothing more to free right now",
+                        Toast.LENGTH_SHORT).show();
+                updateMemory();
+            }, 700);
+        });
     }
 
     // ---------------------------------------------------------------- opening things
@@ -746,6 +804,11 @@ public final class Home extends Activity {
             prefs.setDock(Catalog.defaultDock(apps));
             lastFocusId = null;
             populate();
+        });
+        final boolean vol = prefs.glassVolume();
+        s.add(vol ? "Glass volume bar: on (turn off)" : "Glass volume bar: off (turn on)", () -> {
+            prefs.setGlassVolume(!vol);
+            Volume.enabled = !vol;
         });
         s.add("Open Amazon's home screen", () -> Guard.amazon(this));
         s.note("Glass Home has no internet access: no ads, no tracking, nothing downloaded.");

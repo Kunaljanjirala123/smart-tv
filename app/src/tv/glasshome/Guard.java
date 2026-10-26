@@ -13,6 +13,7 @@ import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -45,6 +46,8 @@ public final class Guard extends AccessibilityService {
     private final Runnable uncover = this::uncover;
     private final Runnable launch = () -> home(this);
     private View cover;
+    private Volume volume;
+    private boolean ownsVolumeKey;
     private long lastLaunch;
     private boolean onAmazonHome;
     private final BroadcastReceiver screenOn = new BroadcastReceiver() {
@@ -108,9 +111,32 @@ public final class Guard extends AccessibilityService {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         lp.windowAnimations = 0;
-        ((WindowManager) getSystemService(WINDOW_SERVICE)).addView(view, lp);
-        cover = view;
+        // The service can be re-bound while it is still starting (the installer switches it off
+        // and on); the old connection's window token is then gone, so go on without the cover.
+        try {
+            ((WindowManager) getSystemService(WINDOW_SERVICE)).addView(view, lp);
+            cover = view;
+        } catch (WindowManager.BadTokenException e) {
+            cover = null;
+        }
         registerReceiver(screenOn, new IntentFilter(Intent.ACTION_SCREEN_ON));
+        Volume.enabled = new Prefs(this).glassVolume();
+        volume = new Volume(this);
+    }
+
+    /**
+     * Every remote key passes through here (guard.xml asks to filter key events): volume keys go
+     * to the glass volume bar, everything else straight back to the system with no work done.
+     */
+    @Override
+    protected boolean onKeyEvent(KeyEvent e) {
+        int code = e.getKeyCode();
+        if (code != KeyEvent.KEYCODE_VOLUME_UP && code != KeyEvent.KEYCODE_VOLUME_DOWN
+                && code != KeyEvent.KEYCODE_VOLUME_MUTE) return false;
+        if (volume == null) return false;
+        // The release follows whatever happened to its press.
+        if (e.getAction() == KeyEvent.ACTION_DOWN) ownsVolumeKey = volume.press(code, e.getRepeatCount());
+        return ownsVolumeKey;
     }
 
     @Override
@@ -122,6 +148,7 @@ public final class Guard extends AccessibilityService {
         } catch (IllegalArgumentException ignored) {
         }
         if (cover != null) ((WindowManager) getSystemService(WINDOW_SERVICE)).removeView(cover);
+        if (volume != null) volume.dismiss();
         if (running == this) running = null;
         super.onDestroy();
     }

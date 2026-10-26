@@ -12,6 +12,13 @@ $keep = @($svc -split ':' | Where-Object { $_ -and $_ -notlike "$Pkg/*" })
 if ($keep.Count -gt 0) { Sh "settings put secure enabled_accessibility_services $($keep -join ':')" | Out-Null }
 else { Sh 'settings delete secure enabled_accessibility_services' | Out-Null; Sh 'settings put secure accessibility_enabled 0' | Out-Null }
 
+if ((Sh 'settings get secure screensaver_components') -like "$Pkg/*") {
+  $saver = Sh 'settings get global glasshome_screensaver'
+  if ($saver -and $saver -ne 'null') { Sh "settings put secure screensaver_components $saver" | Out-Null }
+  else { Sh 'settings delete secure screensaver_components' | Out-Null }
+}
+Sh 'settings delete global glasshome_screensaver' | Out-Null
+
 $sdk = [int](Sh 'getprop ro.build.version.sdk')
 if ($sdk -ge 31) { Sh 'device_config delete alarm_manager min_futurity' | Out-Null }
 else {

@@ -112,7 +112,7 @@ final class Sheet extends FrameLayout {
         root.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         setAlpha(0f);
-        animate().alpha(1f).setDuration(160).start();
+        animate().alpha(1f).setDuration(160).withLayer().start();
         panel.setScaleX(0.92f);
         panel.setScaleY(0.92f);
         panel.animate().scaleX(1f).scaleY(1f).setInterpolator(new OvershootInterpolator(1.2f))
@@ -130,7 +130,7 @@ final class Sheet extends FrameLayout {
         if (closing) return;
         closing = true;
         final ViewGroup parent = (ViewGroup) getParent();
-        animate().alpha(0f).setDuration(140).setInterpolator(new DecelerateInterpolator())
+        animate().alpha(0f).setDuration(140).setInterpolator(new DecelerateInterpolator()).withLayer()
                 .withEndAction(() -> {
                     if (parent != null) parent.removeView(this);
                 }).start();

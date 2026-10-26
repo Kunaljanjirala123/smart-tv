@@ -4,3 +4,4 @@ windows/platform-tools/
 windows/*.apk
 windows/*.sha256
 windows/cleaned.txt
+glass-home/
