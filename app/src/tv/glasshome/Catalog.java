@@ -213,8 +213,11 @@ final class Catalog {
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        p.setColor(Theme.now.light ? 0x66FFFFFF : 0x2EFFFFFF);
+        // Opaque, so the lifted folder's own shadow cannot show through it.
+        p.setShader(new LinearGradient(0, 0, 0, h, Theme.now.light ? 0xFFF7F7F9 : 0xFF4A4A50,
+                Theme.now.light ? 0xFFE3E3E8 : 0xFF2E2E33, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, w, h, p);
+        p.setShader(null);
         float gap = h * 0.08f, cellH = (h - gap * 3) / 2f, cellW = cellH * 16f / 9f;
         float left = (w - cellW * 2 - gap) / 2f;
         RectF cell = new RectF();

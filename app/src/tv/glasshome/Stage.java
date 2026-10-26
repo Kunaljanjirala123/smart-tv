@@ -33,7 +33,6 @@ final class Stage extends FrameLayout {
         this.artW = artW;
         this.artH = artH;
         captionSpace = Ui.dp(c, 36);
-        setClipChildren(false);
         setClipToPadding(false);
         for (int i = 0; i < 2; i++) {
             layers[i] = new Layer(c);
@@ -43,7 +42,12 @@ final class Stage extends FrameLayout {
         caption = Ui.text(c, 17, Theme.now.soft, Ui.REGULAR);
         caption.setGravity(Gravity.CENTER);
         caption.setAlpha(0f);
-        addView(caption, new LayoutParams(LayoutParams.MATCH_PARENT, captionSpace, Gravity.BOTTOM));
+        // Just under the art, not at the bottom of the room left for the glow.
+        LayoutParams cl = new LayoutParams(LayoutParams.MATCH_PARENT, captionSpace, Gravity.TOP);
+        cl.topMargin = (height(c, artH) - captionSpace) / 2 + artH / 2 + Ui.dp(c, 10);
+        addView(caption, cl);
+        // After the children are added, so their render nodes do not clip the glow to their bounds.
+        setClipChildren(false);
     }
 
     String showing() {

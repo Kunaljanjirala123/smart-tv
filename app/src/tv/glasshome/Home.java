@@ -63,9 +63,11 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private final ExecutorService artWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService stageWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService net = Executors.newSingleThreadExecutor();
-    private final Map<String, Bitmap> artCache = new HashMap<>();
-    private final Map<String, Integer> brandCache = new HashMap<>();
-    private final Map<String, Catalog.StageArt> stageCache = new LinkedHashMap<String, Catalog.StageArt>(8, 0.75f, true) {
+    // Art outlives the activity, which a new theme recreates: switching looks is then instant.
+    // App art depends on the icon style, never on the theme. All touched on the UI thread only.
+    private static final Map<String, Bitmap> artCache = new HashMap<>();
+    private static final Map<String, Integer> brandCache = new HashMap<>();
+    private static final Map<String, Catalog.StageArt> stageCache = new LinkedHashMap<String, Catalog.StageArt>(8, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Catalog.StageArt> e) {
             return size() > STAGE_CACHE;
@@ -109,6 +111,14 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private final BroadcastReceiver packages = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
+            // An installed, updated or removed app may have new art: draw it again.
+            String pkg = i.getData() != null ? i.getData().getSchemeSpecificPart() : null;
+            if (pkg != null) {
+                artCache.remove(Prefs.ICONS_TVOS + ":" + pkg);
+                artCache.remove(Prefs.ICONS_BANNERS + ":" + pkg);
+                brandCache.remove(pkg);
+                stageCache.remove(pkg);
+            }
             ui.removeCallbacks(reload);
             ui.postDelayed(reload, 400);
         }
@@ -212,6 +222,13 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         super.onDestroy();
     }
 
+    /** Under memory pressure in the background, the large stage pictures go first; they are quick to redo. */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_BACKGROUND) stageCache.clear();
+    }
+
     /** HOME while already home: everything closed, back to the first dock app. */
     @Override
     protected void onNewIntent(Intent intent) {
@@ -230,10 +247,10 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
     private void handleExtras(Intent i) {
         if (i == null) return;
         String theme = i.getStringExtra("theme");
+        i.removeExtra("theme");
         if (theme != null && java.util.Arrays.asList(Theme.CHOICES).contains(theme) && !theme.equals(prefs.theme())) {
+            // onResume, which always follows, sees the new look and recreates once.
             prefs.setTheme(theme);
-            i.removeExtra("theme");
-            recreate();
             return;
         }
         if (i.getBooleanExtra("skip_setup", false) && setup != null) {
@@ -542,10 +559,15 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
 
     // ---------------------------------------------------------------- content
 
+    /** Cached art is kept per icon style. */
+    private String artKey(String id) {
+        return prefs.icons() + ":" + id;
+    }
+
     private void reload() {
         List<Catalog.Item> fresh = Catalog.apps(this);
         for (Catalog.Item it : fresh) {
-            Bitmap b = artCache.get(it.id);
+            Bitmap b = artCache.get(artKey(it.id));
             if (b != null) {
                 it.art = b;
                 Integer col = brandCache.get(it.id);
@@ -691,7 +713,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
 
     private void artArrived(Catalog.Item it) {
         if (it.art != null) {
-            artCache.put(it.id, it.art);
+            artCache.put(artKey(it.id), it.art);
             brandCache.put(it.id, it.brand);
         }
         for (Tile t : tiles) if (t.item.id.equals(it.id)) t.invalidate();
@@ -777,9 +799,9 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
         Backdrop.Wash in = washes[wash];
         in.setColour(colour);
         in.animate().cancel();
-        in.animate().alpha(1f).setDuration(600).setInterpolator(Ui.EASE).start();
+        in.animate().alpha(1f).setDuration(420).setInterpolator(Ui.EASE).start();
         out.animate().cancel();
-        out.animate().alpha(0f).setDuration(600).setInterpolator(Ui.EASE).start();
+        out.animate().alpha(0f).setDuration(420).setInterpolator(Ui.EASE).start();
     }
 
     /** Keeps the band from {@code top} to {@code bottom} (content coordinates) comfortably on screen. */

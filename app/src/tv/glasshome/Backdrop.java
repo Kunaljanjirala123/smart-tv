@@ -116,7 +116,8 @@ final class Backdrop {
 
     /**
      * {@code src} shrunk by {@code shrink} and box-blurred three times with {@code radius}: close
-     * to a Gaussian blur of {@code shrink * radius} pixels, for very little work.
+     * to a Gaussian blur of {@code shrink * radius} pixels, for very little work. The blur runs on
+     * premultiplied colour, so transparent pixels fade a colour out instead of darkening it.
      */
     static Bitmap blur(Bitmap src, int shrink, int radius) {
         int w = Math.max(1, src.getWidth() / shrink), h = Math.max(1, src.getHeight() / shrink);
@@ -124,10 +125,35 @@ final class Backdrop {
         int[] px = new int[w * h];
         small.getPixels(px, 0, w, 0, 0, w, h);
         if (small != src) small.recycle();
+        premultiply(px, true);
         for (int i = 0; i < 3; i++) boxBlur(px, w, h, radius);
+        premultiply(px, false);
         Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         out.setPixels(px, 0, w, 0, 0, w, h);
         return out;
+    }
+
+    /** Colour times alpha ({@code on}), or back again; opaque pixels are left as they are. */
+    private static void premultiply(int[] px, boolean on) {
+        for (int i = 0; i < px.length; i++) {
+            int c = px[i], a = c >>> 24;
+            if (a == 255) continue;
+            if (a == 0) {
+                px[i] = 0;
+                continue;
+            }
+            int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+            if (on) {
+                r = r * a / 255;
+                g = g * a / 255;
+                b = b * a / 255;
+            } else {
+                r = Math.min(255, r * 255 / a);
+                g = Math.min(255, g * 255 / a);
+                b = Math.min(255, b * 255 / a);
+            }
+            px[i] = a << 24 | r << 16 | g << 8 | b;
+        }
     }
 
     /** One horizontal and one vertical running-sum pass. */

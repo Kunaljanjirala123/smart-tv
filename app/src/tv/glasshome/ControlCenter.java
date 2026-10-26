@@ -193,7 +193,8 @@ final class ControlCenter extends FrameLayout {
         bg.setExitFadeDuration(150);
         v.setBackground(bg);
         v.setOutlineProvider(Ui.rounded(Ui.dp(c, 16)));
-        v.setElevation(Ui.dp(c, 1));
+        // Shadows only under the opaque light-theme buttons; under translucent glass they show through.
+        if (t.light) v.setElevation(Ui.dp(c, 1));
         ImageView g = new ImageView(c);
         g.setImageDrawable(new Glyph(b.glyph, t.panelText));
         int gs = Ui.dp(c, 22);
@@ -216,7 +217,7 @@ final class ControlCenter extends FrameLayout {
 
     private static void lift(View v, float scale) {
         v.setOnFocusChangeListener((x, has) -> x.animate().scaleX(has ? scale : 1f).scaleY(has ? scale : 1f)
-                .translationZ(has ? Ui.dp(x.getContext(), 6) : 0f)
+                .translationZ(has && Theme.now.light ? Ui.dp(x.getContext(), 6) : 0f)
                 .setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(220).start());
     }
 

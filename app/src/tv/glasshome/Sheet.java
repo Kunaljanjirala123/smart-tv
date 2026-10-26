@@ -63,6 +63,7 @@ final class Sheet extends FrameLayout {
         panel.setPadding(pad, pad, pad, Ui.dp(c, 14));
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
+        col.setClipChildren(false);
         TextView tt = Ui.text(c, 24, t.panelText, Ui.MEDIUM);
         tt.setText(title);
         tt.setPadding(Ui.dp(c, 8), 0, Ui.dp(c, 8), 0);
@@ -288,7 +289,7 @@ final class Sheet extends FrameLayout {
             if (has) lastFocus = x;
             // The lit row lifts off the glass a little, like a tvOS menu item.
             x.animate().scaleX(has ? 1.03f : 1f).scaleY(has ? 1.03f : 1f)
-                    .translationZ(has ? Ui.dp(c, 4) : 0f)
+                    .translationZ(has && Theme.now.light ? Ui.dp(c, 4) : 0f)
                     .setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(200).start();
         });
         list.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
