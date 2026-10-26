@@ -24,6 +24,10 @@ foreach ($l in Get-Content $Log) {
     if ($old -eq 'null') { Sh "settings delete $($f[1]) $($f[2])" | Out-Null }
     else { Sh "settings put $($f[1]) $($f[2]) $old" | Out-Null }
     Ok "restored: $($f[2])"
+  } elseif ($f[0] -eq 'config' -and $f.Count -ge 4) {
+    if ($f[3] -eq 'null') { Sh "device_config delete $($f[1]) $($f[2])" | Out-Null }
+    else { Sh "device_config put $($f[1]) $($f[2]) $($f[3])" | Out-Null }
+    Ok "restored: $($f[2])"
   }
 }
 if ($failed.Count -gt 0) { Set-Content $Log $failed; Warn "Kept the lines that failed in $Log; run this again to retry them." }

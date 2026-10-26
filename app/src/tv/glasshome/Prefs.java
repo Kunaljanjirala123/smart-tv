@@ -8,13 +8,23 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/** The household's layout: which apps sit in the dock, the grid order and hidden apps. */
+/** The household's layout (dock, grid order, hidden apps) and the few settings. */
 final class Prefs {
     static final int DOCK_MAX = 5;
-    private final SharedPreferences sp;
+    private final SharedPreferences sp, settings;
 
     Prefs(Context c) {
         sp = c.getSharedPreferences("layout", Context.MODE_PRIVATE);
+        // Kept apart from the layout, so Reset layout leaves them alone.
+        settings = c.getSharedPreferences("settings", Context.MODE_PRIVATE);
+    }
+
+    boolean glassVolume() {
+        return settings.getBoolean("glass_volume", true);
+    }
+
+    void setGlassVolume(boolean on) {
+        settings.edit().putBoolean("glass_volume", on).apply();
     }
 
     boolean hasDock() {

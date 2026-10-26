@@ -47,13 +47,16 @@ final class Lens extends View implements Choreographer.FrameCallback {
         rim.setStrokeWidth(rimW);
     }
 
-    /** Moves (or, the first time, places) the lens over {@code rect}, in this view's coordinates. */
-    void moveTo(RectF rect) {
+    /**
+     * Moves (or, the first time, places) the lens over {@code rect}, in this view's coordinates;
+     * {@code jump} places it there at once instead of springing.
+     */
+    void moveTo(RectF rect, boolean jump) {
         target[0] = rect.left;
         target[1] = rect.top;
         target[2] = rect.right;
         target[3] = rect.bottom;
-        if (!placed || !visible) {
+        if (jump || !placed || !visible) {
             spring.snap();
             placed = true;
         }

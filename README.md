@@ -6,10 +6,19 @@ A fast, ad-free home screen for Fire TV in a liquid-glass style.
   and one glass highlight that springs from app to app.
 - **Your apps first:** a dock of up to five favourites on the first screen. Press Down for every
   other app.
-- **Controls at the top:** Inputs (HDMI), network status, Settings and Edit.
+- **Controls at the top:** Inputs (HDMI), network status with Wi-Fi signal, free memory,
+  Settings and Edit. Press OK on the memory pill to close apps left running in the background.
+- **Glass Settings panel:** Wi-Fi, remotes and Bluetooth, soundbar, inputs, apps, free memory
+  and sleep/restart open straight from Glass Home. Picture, display and sound are Amazon-only
+  screens, so they open through All settings.
+- **Back home without a scroll:** HOME from an app shows the dock already in place.
+- **Glass volume bar:** when the volume changes, a glass bar whose level glides covers the TV's
+  own (Fire OS still changes the volume, so a soundbar on HDMI ARC follows as before). Edit
+  turns it off.
+- **Clock screensaver:** a plain clock on black that moves a little every minute.
 - **No ads, nothing downloaded:** the app has no internet permission, so it cannot show ads,
-  load recommendations or send data anywhere. Its only permission is reading whether the TV is
-  on Wi-Fi or Ethernet.
+  load recommendations or send data anywhere. Its only permissions are reading whether the TV
+  is on Wi-Fi or Ethernet and closing background apps.
 - **Smooth:** the highlight and the page glide on springs that keep their speed when you hold a
   D-pad key, the page moves in sub-pixel steps, tiles lift with real shadows drawn by the GPU,
   and nothing is allocated while anything moves, so there are no garbage-collection stutters.
@@ -26,7 +35,8 @@ A fast, ad-free home screen for Fire TV in a liquid-glass style.
 | Back | Return to the first dock app. |
 | Home | Glass Home. |
 
-**Edit** (top right) has *Show a hidden app*, *Reset layout* and *Open Amazon's home screen*.
+**Edit** (top right) has *Show a hidden app*, *Reset layout*, *Glass volume bar* on or off and
+*Open Amazon's home screen*.
 
 ## Install from a Windows PC
 
@@ -63,8 +73,8 @@ Adverts that are part of a video stream (YouTube, for example) cannot be blocked
 Fire OS ignores the "default home app" setting for third-party apps. Like
 [dumbtv](https://github.com/humblemuzzu/dumbtv), Glass Home uses a small accessibility
 service (`Guard.java`) that notices Amazon's home screen and replaces it before it is drawn. It
-reads no screen content. The installer also sets `min_futurity=0` for alarms so the switch is
-immediate.
+reads no screen content and sees none of the remote's keys. The installer also sets `min_futurity=0` for alarms so
+the switch is immediate, and makes the Glass Home clock the screensaver.
 
 ## Building
 

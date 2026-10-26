@@ -2,5 +2,6 @@
 <resources>
     <string name="app_name">Glass Home</string>
     <string name="guard_label">Glass Home button</string>
-    <string name="guard_description">Sends the HOME button to Glass Home instead of Amazon\'s home screen. It reads no screen content and has no internet access.</string>
+    <string name="guard_description">Sends the HOME button to Glass Home instead of Amazon\'s home screen, and shows the glass volume bar over the TV\'s own when the volume changes. It reads no screen content and has no internet access.</string>
+    <string name="clock_label">Glass Home clock</string>
 </resources>
