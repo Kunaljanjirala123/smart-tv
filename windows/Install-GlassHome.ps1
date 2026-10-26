@@ -1,33 +1,14 @@
 # Install-GlassHome.ps1 - puts Glass Home on a Fire TV over Wi-Fi and gives it the HOME button.
 # Keep glass-home.apk and glass-home.apk.sha256 in the same folder as this script.
 # Run: double-click Install-GlassHome.bat
+param([string]$Ip)   # optional: Install-GlassHome.bat 10.0.0.5
 $ErrorActionPreference = 'Continue'   # adb writes to stderr; every step is checked explicitly
-$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Here = $PSScriptRoot
 $Pkg  = 'tv.glasshome'
 $GuardId = 'tv.glasshome/tv.glasshome.Guard'
+. "$Here\TvCommon.ps1"
 
-function Say($m)  { Write-Host "`n== $m" -ForegroundColor Cyan }
-function Ok($m)   { Write-Host "  $m" -ForegroundColor Green }
-function Warn($m) { Write-Host "  $m" -ForegroundColor Yellow }
-function Fail($m) { Write-Host "`n  $m" -ForegroundColor Red; Read-Host 'Press Enter to close'; exit 1 }
-
-# ---- adb
-$Adb = (Get-Command adb.exe -ErrorAction SilentlyContinue).Source
-foreach ($p in @("$Here\platform-tools\adb.exe", "$Here\..\firetv-clean\platform-tools\adb.exe")) {
-  if (-not $Adb -and (Test-Path $p)) { $Adb = (Resolve-Path $p).Path }
-}
-if (-not $Adb) {
-  Say 'Downloading Android platform-tools (adb) from dl.google.com'
-  $zip = "$Here\platform-tools.zip"
-  try {
-    Invoke-WebRequest 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile $zip -UseBasicParsing -ErrorAction Stop
-    Expand-Archive $zip -DestinationPath $Here -Force -ErrorAction Stop
-    Remove-Item $zip
-  } catch { Fail "Could not download adb: $_" }
-  $Adb = "$Here\platform-tools\adb.exe"
-}
-function A { & $Adb -s $script:Serial @args 2>&1 }
-function Sh([string]$cmd) { ((& $Adb -s $script:Serial shell $cmd 2>&1) -join "`n").Trim() }
+$Adb = Find-Adb
 
 # ---- the APK
 Say 'Checking the app file'
@@ -40,30 +21,8 @@ Ok "glass-home.apk  sha256 $got"
 
 # ---- connect
 Say 'Connecting to the TV'
-$saved = "$Here\tv-ip.txt"
-$default = if (Test-Path $saved) { (Get-Content $saved | Select-Object -First 1).Trim() } else { '' }
-$prompt = if ($default) { "TV IPv4 address [$default]" } else { 'TV IPv4 address (Settings > Network on the TV)' }
-$Ip = (Read-Host $prompt).Trim()
-if (-not $Ip) { $Ip = $default }
-if (-not $Ip) { Fail 'No address given.' }
-Set-Content $saved $Ip
-$script:Serial = "${Ip}:5555"
-& $Adb connect $script:Serial | Out-Host
-Write-Host '  If the TV asks "Allow USB debugging?", tick "Always allow" and press Allow.'
-$state = ''
-for ($i = 0; $i -lt 30; $i++) {
-  $state = ((& $Adb -s $script:Serial get-state 2>$null) -join '').Trim()
-  if ($state -eq 'device') { break }
-  Start-Sleep 2
-  if ($i % 5 -eq 4) { & $Adb connect $script:Serial | Out-Null }
-}
-if ($state -ne 'device') { Fail "The TV did not connect ($state). Check the address, that ADB debugging is on, and press Allow on the TV." }
-$maker = Sh 'getprop ro.product.manufacturer'
-$model = Sh 'getprop ro.product.model'
-$sdk   = [int](Sh 'getprop ro.build.version.sdk')
-Ok "connected: $maker $model (Android sdk $sdk)"
-if ($maker -notlike 'Amazon*') { Fail 'This is not a Fire TV. Stopping without changes.' }
-if ($sdk -lt 28) { Fail 'Glass Home needs Fire OS 7 or newer.' }
+$Serial = Connect-Tv $Ip
+$sdk = Assert-FireTv
 
 # ---- install
 Say 'Installing Glass Home'
@@ -119,11 +78,14 @@ if ((Sh 'pm path tv.dumbtv.home') -match 'package:') {
   if ($ans -match '^(y|yes)$') { A uninstall tv.dumbtv.home | Out-Host }
 }
 
-& $Adb disconnect $script:Serial | Out-Null
 Say 'Done'
 Write-Host '  Press HOME on the remote: Glass Home should appear.'
 Write-Host '  Menu button (three lines) on any app: pin to dock, move, hide, app info.'
 Write-Host '  Edit (top right) > Open Amazon''s home screen, any time you need it.'
+Write-Host ''
+$ans = Read-Host 'Also switch off Amazon''s adverts, tracking and junk apps now? (Y/n)'
+if ($ans -notmatch '^(n|no)$') { & "$Here\Clean-FireTV.ps1" -Ip $Serial -Inner }
+& $Adb disconnect $Serial | Out-Null
 Write-Host ''
 Write-Host '  Last step: turn ADB debugging OFF on the TV (Settings > My Fire TV > Developer Options).' -ForegroundColor Yellow
 Write-Host '  Glass Home keeps working with it off.' -ForegroundColor Yellow

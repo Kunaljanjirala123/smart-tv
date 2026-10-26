@@ -1,18 +1,10 @@
 # Uninstall-GlassHome.ps1 - gives HOME back to Amazon's home screen and removes Glass Home.
+param([string]$Ip)
 $ErrorActionPreference = 'Continue'
-$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Pkg = 'tv.glasshome'
-$Adb = (Get-Command adb.exe -ErrorAction SilentlyContinue).Source
-foreach ($p in @("$Here\platform-tools\adb.exe", "$Here\..\firetv-clean\platform-tools\adb.exe")) {
-  if (-not $Adb -and (Test-Path $p)) { $Adb = (Resolve-Path $p).Path }
-}
-if (-not $Adb) { Write-Host 'adb not found: run Install-GlassHome.bat once first.'; Read-Host; exit 1 }
-$saved = "$Here\tv-ip.txt"
-$default = if (Test-Path $saved) { (Get-Content $saved | Select-Object -First 1).Trim() } else { '' }
-$Ip = (Read-Host "TV IPv4 address [$default]").Trim(); if (-not $Ip) { $Ip = $default }
-$Serial = "${Ip}:5555"
-& $Adb connect $Serial | Out-Host
-function Sh([string]$cmd) { ((& $Adb -s $Serial shell $cmd 2>&1) -join "`n").Trim() }
+. "$PSScriptRoot\TvCommon.ps1"
+$Adb = Find-Adb -NoDownload
+$Serial = Connect-Tv $Ip
 
 $svc = Sh 'settings get secure enabled_accessibility_services'
 if ($svc -eq 'null') { $svc = '' }

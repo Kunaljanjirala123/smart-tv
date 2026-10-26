@@ -11,6 +11,9 @@
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowDisablePreview">false</item>
         <item name="android:colorAccent">#FF8FB8FF</item>
+        <!-- Deeper elevation shadows, so a focused tile clearly lifts off the dark glass. -->
+        <item name="android:ambientShadowAlpha">0.12</item>
+        <item name="android:spotShadowAlpha">0.45</item>
     </style>
     <color name="base">#FF070912</color>
 </resources>
