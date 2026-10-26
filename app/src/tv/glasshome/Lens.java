@@ -3,6 +3,7 @@ package tv.glasshome;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -13,15 +14,19 @@ import android.view.View;
  * The single glass highlight that springs from tile to tile. It lives in the scrolling content,
  * so it moves with the page, and draws over the focused tile: a clear lens with a bright rim, a
  * sheen and a soft glow, so the app art shows through it.
+ *
+ * Each frame only moves the shaders' matrices and paint alphas: nothing is allocated while it
+ * moves, so the garbage collector never pauses the animation.
  */
 final class Lens extends View implements Choreographer.FrameCallback {
-    // Spring tuned to settle in about 250 ms with a slight, liquid overshoot.
-    private static final float STIFFNESS = 420f, DAMPING = 0.68f;
-
-    private final float[] pos = new float[4], vel = new float[4], target = new float[4];
+    // Settles in about 250 ms with a slight, liquid overshoot.
+    private final Spring spring = new Spring(4, 420f, 0.72f);
+    private final float[] pos = spring.pos, target = spring.target;
     private final Paint body = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Shader sheenShader, rimShader;
+    private final Matrix sheenMatrix = new Matrix(), rimMatrix = new Matrix();
     private final RectF r = new RectF();
     private final float radius, rimW;
     private boolean visible, running, placed;
@@ -33,6 +38,11 @@ final class Lens extends View implements Choreographer.FrameCallback {
         radius = Ui.dp(c, 14);
         rimW = Ui.dp(c, 2);
         body.setColor(0x14FFFFFF);
+        // Unit gradients, stretched over the lens by their matrices on each draw.
+        sheenShader = new LinearGradient(0, 0, 0, 1, 0x40FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        sheen.setShader(sheenShader);
+        rimShader = new LinearGradient(0, 0, 1, 1, 0xF2FFFFFF, 0x55FFFFFF, Shader.TileMode.CLAMP);
+        rim.setShader(rimShader);
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(rimW);
     }
@@ -44,8 +54,7 @@ final class Lens extends View implements Choreographer.FrameCallback {
         target[2] = rect.right;
         target[3] = rect.bottom;
         if (!placed || !visible) {
-            System.arraycopy(target, 0, pos, 0, 4);
-            vel[0] = vel[1] = vel[2] = vel[3] = 0;
+            spring.snap();
             placed = true;
         }
         visible = true;
@@ -66,23 +75,9 @@ final class Lens extends View implements Choreographer.FrameCallback {
 
     @Override
     public void doFrame(long now) {
-        float dt = lastFrame == 0 ? 1f / 60 : Math.min((now - lastFrame) / 1e9f, 1f / 20);
+        float dt = Spring.dt(now, lastFrame);
         lastFrame = now;
-        boolean moving = false;
-        float c = 2f * (float) Math.sqrt(STIFFNESS) * DAMPING;
-        // Two half steps keep the spring stable on a frame that came late.
-        for (int step = 0; step < 2; step++) {
-            float h = dt / 2f;
-            for (int i = 0; i < 4; i++) {
-                float a = -STIFFNESS * (pos[i] - target[i]) - c * vel[i];
-                vel[i] += a * h;
-                pos[i] += vel[i] * h;
-            }
-        }
-        for (int i = 0; i < 4; i++) {
-            if (Math.abs(pos[i] - target[i]) > 0.3f || Math.abs(vel[i]) > 4f) moving = true;
-            else { pos[i] = target[i]; vel[i] = 0; }
-        }
+        boolean moving = spring.step(dt);
         float wantAlpha = visible ? 1f : 0f;
         alpha += (wantAlpha - alpha) * Math.min(1f, dt * 14f);
         if (Math.abs(alpha - wantAlpha) > 0.01f) moving = true;
@@ -95,15 +90,19 @@ final class Lens extends View implements Choreographer.FrameCallback {
     @Override
     protected void onDraw(Canvas c) {
         if (alpha <= 0f || !placed) return;
+        int a = Math.round(alpha * 255);
         r.set(pos[0], pos[1], pos[2], pos[3]);
         body.setAlpha(Math.round(alpha * 0x14));
         c.drawRoundRect(r, radius, radius, body);
-        sheen.setShader(new LinearGradient(0, r.top, 0, r.top + r.height() * 0.55f,
-                Math.round(alpha * 0x40) << 24 | 0xFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        sheenMatrix.setScale(1f, r.height() * 0.55f);
+        sheenMatrix.postTranslate(0, r.top);
+        sheenShader.setLocalMatrix(sheenMatrix);
+        sheen.setAlpha(a);
         c.drawRoundRect(r, radius, radius, sheen);
-        rim.setShader(new LinearGradient(r.left, r.top, r.right, r.bottom,
-                Math.round(alpha * 0xF2) << 24 | 0xFFFFFF, Math.round(alpha * 0x55) << 24 | 0xFFFFFF,
-                Shader.TileMode.CLAMP));
+        rimMatrix.setScale(r.width(), r.height());
+        rimMatrix.postTranslate(r.left, r.top);
+        rimShader.setLocalMatrix(rimMatrix);
+        rim.setAlpha(a);
         float in = rimW / 2f;
         r.inset(in, in);
         c.drawRoundRect(r, radius - in, radius - in, rim);

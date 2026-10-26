@@ -1,6 +1,5 @@
 package tv.glasshome;
 
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
@@ -19,15 +18,16 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.format.DateFormat;
+import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -45,6 +45,8 @@ import java.util.concurrent.Executors;
  */
 public final class Home extends Activity {
     private static final int COLS = 5;
+    private static final Interpolator POP = new OvershootInterpolator(1.5f);
+    private static final Interpolator EASE = new DecelerateInterpolator();
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -63,8 +65,6 @@ public final class Home extends Activity {
     private TextView clock, date, hero, appsHeader, network;
     private Lens lens;
     private Sheet sheet;
-    private ValueAnimator scrollAnim;
-    private int scrollTarget = -1;
     private String lastFocusId;
     private int pageH, artW, artH, dockW, dockH, gap, side;
     private boolean resumed;
@@ -85,29 +85,58 @@ public final class Home extends Activity {
     private final Runnable reload = this::reload;
     private ConnectivityManager.NetworkCallback netCallback;
 
-    /** A ScrollView that only moves when told to: no jumps of its own on focus changes. */
-    static final class Pager extends ScrollView {
+    /**
+     * The page, which only moves when told to: no jumps of its own on focus changes. It glides
+     * its content on a spring by translation, a render-node property, so scrolling re-records
+     * nothing but the glass and moves in sub-pixel steps instead of whole-pixel jumps.
+     */
+    static final class Pager extends FrameLayout implements Choreographer.FrameCallback {
+        // Critically damped: about 350 ms, no bounce past the top of the page.
+        private final Spring spring = new Spring(1, 160f, 1f);
+        private boolean running;
+        private long lastFrame;
+
         Pager(Context c) {
             super(c);
-            setVerticalScrollBarEnabled(false);
-            setOverScrollMode(OVER_SCROLL_NEVER);
-            setSmoothScrollingEnabled(false);
+        }
+
+        /** The content is as tall as it needs to be, not as tall as the screen. */
+        @Override
+        protected void measureChildWithMargins(View child, int wSpec, int wUsed, int hSpec, int hUsed) {
+            ViewGroup.LayoutParams lp = child.getLayoutParams();
+            child.measure(getChildMeasureSpec(wSpec, getPaddingLeft() + getPaddingRight() + wUsed, lp.width),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+        }
+
+        /** Where the page is heading, in pixels from the top. */
+        int target() {
+            return Math.round(spring.target[0]);
+        }
+
+        void glideTo(int y) {
+            if (spring.target[0] == y) return;
+            spring.target[0] = y;
+            if (running) return;
+            running = true;
+            lastFrame = 0;
+            Choreographer.getInstance().postFrameCallback(this);
         }
 
         @Override
-        protected int computeScrollDeltaToGetChildRectOnScreen(Rect r) {
-            return 0;
-        }
-
-        @Override
-        public boolean executeKeyEvent(KeyEvent e) {
-            return false;
-        }
-
-        @Override
-        protected void onScrollChanged(int l, int t, int ol, int ot) {
-            super.onScrollChanged(l, t, ol, ot);
+        public void doFrame(long now) {
+            boolean moving = spring.step(Spring.dt(now, lastFrame));
+            lastFrame = now;
+            if (getChildCount() > 0) getChildAt(0).setTranslationY(-spring.pos[0]);
             Glass.invalidateAll();
+            if (moving) Choreographer.getInstance().postFrameCallback(this);
+            else running = false;
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            Choreographer.getInstance().removeFrameCallback(this);
+            running = false;
+            super.onDetachedFromWindow();
         }
     }
 
@@ -225,7 +254,7 @@ public final class Home extends Activity {
         content.addView(column, new FrameLayout.LayoutParams(-1, -2));
         lens = new Lens(this);
         content.addView(lens, new FrameLayout.LayoutParams(-1, -1));
-        pager.addView(content, new ScrollView.LayoutParams(-1, -2));
+        pager.addView(content, new FrameLayout.LayoutParams(-1, -2));
         root.addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         // Page one ------------------------------------------------------------
@@ -290,6 +319,9 @@ public final class Home extends Activity {
 
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((old, now) -> focused(now));
         setContentView(root);
+        // The wallpaper covers the whole window, so the window's own background would only be
+        // painted to be painted over: drop it and save a full-screen fill on every frame.
+        getWindow().setBackgroundDrawable(null);
     }
 
     private TextView pillText() {
@@ -312,7 +344,7 @@ public final class Home extends Activity {
         f.setClickable(true);
         f.setOnClickListener(click);
         f.setOnFocusChangeListener((v, has) -> v.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
-                .setInterpolator(has ? new OvershootInterpolator(1.5f) : new DecelerateInterpolator())
+                .setInterpolator(has ? POP : EASE)
                 .setDuration(240).start());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, Ui.dp(this, 42));
         lp.leftMargin = Ui.dp(this, 12);
@@ -487,8 +519,7 @@ public final class Home extends Activity {
             hero.animate().cancel();
             hero.setText(name);
             hero.setTranslationX(-Ui.dp(this, 10));
-            hero.animate().alpha(1f).translationX(0).setDuration(220)
-                    .setInterpolator(new DecelerateInterpolator()).start();
+            hero.animate().alpha(1f).translationX(0).setDuration(220).setInterpolator(EASE).start();
         }
     }
 
@@ -503,18 +534,7 @@ public final class Home extends Activity {
     }
 
     private void scrollTo(int y) {
-        if (y == scrollTarget && scrollAnim != null && scrollAnim.isRunning()) return;
-        if (y == pager.getScrollY()) {
-            scrollTarget = y;
-            return;
-        }
-        scrollTarget = y;
-        if (scrollAnim != null) scrollAnim.cancel();
-        scrollAnim = ValueAnimator.ofInt(pager.getScrollY(), y);
-        scrollAnim.setDuration(Math.abs(y - pager.getScrollY()) > pageH / 2 ? 520 : 360);
-        scrollAnim.setInterpolator(new DecelerateInterpolator(2.2f));
-        scrollAnim.addUpdateListener(a -> pager.scrollTo(0, (int) a.getAnimatedValue()));
-        scrollAnim.start();
+        pager.glideTo(y);
     }
 
     private void restoreFocus() {
