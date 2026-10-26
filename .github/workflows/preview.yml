@@ -6,6 +6,9 @@ on:
     workflows: ["Build Glass Home"]
     types: [completed]
 
+permissions:
+  contents: write
+
 jobs:
   preview:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
@@ -33,8 +36,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: false
           script: bash .github/preview.sh
-      - uses: actions/upload-artifact@v4
+      - name: Publish screenshots to the "preview" pre-release
         if: always()
-        with:
-          name: screenshots
-          path: shots/
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete preview --yes --cleanup-tag 2>/dev/null || true
+          gh release create preview shots/* --prerelease --title "Emulator preview" \
+            --notes "Screenshots from an Android TV 11 emulator, run ${{ github.run_id }}." --latest=false
