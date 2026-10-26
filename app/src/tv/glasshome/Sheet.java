@@ -284,7 +284,9 @@ final class Sheet extends FrameLayout {
         }
         row.setOnFocusChangeListener((x, has) -> {
             if (has) lastFocus = x;
+            // The lit row lifts off the glass a little, like a tvOS menu item.
             x.animate().scaleX(has ? 1.03f : 1f).scaleY(has ? 1.03f : 1f)
+                    .translationZ(has ? Ui.dp(c, 4) : 0f)
                     .setInterpolator(has ? Ui.POP : Ui.EASE).setDuration(200).start();
         });
         list.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
