@@ -114,8 +114,7 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
             // An installed, updated or removed app may have new art: draw it again.
             String pkg = i.getData() != null ? i.getData().getSchemeSpecificPart() : null;
             if (pkg != null) {
-                artCache.remove(Prefs.ICONS_TVOS + ":" + pkg);
-                artCache.remove(Prefs.ICONS_BANNERS + ":" + pkg);
+                artCache.keySet().removeIf(k -> k.endsWith(":" + pkg));
                 brandCache.remove(pkg);
                 stageCache.remove(pkg);
             }
@@ -574,9 +573,9 @@ public final class Home extends Activity implements ControlCenter.Host, Setup.Ho
 
     // ---------------------------------------------------------------- content
 
-    /** Cached art is kept per icon style. */
+    /** Cached art is kept per icon style and size (the dock size and apps per row set the size). */
     private String artKey(String id) {
-        return prefs.icons() + ":" + id;
+        return prefs.icons() + ":" + artW + ":" + id;
     }
 
     private void reload() {
