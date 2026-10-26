@@ -16,7 +16,8 @@ import java.util.List;
 
 /**
  * Liquid glass: the frosted backdrop seen through the surface at its exact screen position,
- * a faint white body, a sheen across the top and a bright rim that fades towards the bottom.
+ * a body tinted for the theme, a sheen across the top and a bright rim that fades towards the
+ * bottom.
  */
 final class Glass {
     /** Every live glass surface, so they can be redrawn when the content scrolls under them. */
@@ -24,7 +25,7 @@ final class Glass {
 
     private final Backdrop backdrop;
     private final Paint frost = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final Paint body = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bodyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final BitmapShader shader;
@@ -34,10 +35,10 @@ final class Glass {
     private float lastH = -1;
     private final float rimWidth;
 
-    /** Body alpha: 0 to 255. Panels use a little, the highlight lens more. */
-    int bodyAlpha = 0x12;
-    int sheenAlpha = 0x30;
-    int rimTop = 0xA6, rimBottom = 0x1A;
+    /** Body colour over the frost, then the sheen and rim alphas: panels use more body. */
+    int body = Theme.now.glassBody;
+    int sheenAlpha = Theme.now.glassSheen;
+    int rimTop = Theme.now.rimTop, rimBottom = Theme.now.rimBottom;
 
     Glass(Context c) {
         backdrop = Backdrop.get(c);
@@ -58,8 +59,8 @@ final class Glass {
         shader.setLocalMatrix(matrix);
         r.set(0, 0, w, h);
         c.drawRoundRect(r, radius, radius, frost);
-        body.setColor(bodyAlpha << 24 | 0xFFFFFF);
-        c.drawRoundRect(r, radius, radius, body);
+        bodyPaint.setColor(body);
+        c.drawRoundRect(r, radius, radius, bodyPaint);
         if (h != lastH) {
             lastH = h;
             sheen.setShader(new LinearGradient(0, 0, 0, h * 0.6f,
