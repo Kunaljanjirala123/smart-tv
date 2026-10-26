@@ -51,7 +51,9 @@ final class Tile extends View {
         this.artW = artW;
         this.artH = artH;
         this.showLabel = showLabel;
-        this.labelSpace = showLabel ? Ui.dp(c, 30) : 0;
+        // Room for the whole label, descenders included, below the enlarged art: the tile's
+        // bounds clip what it draws, so a shorter space cut the bottom off the name.
+        this.labelSpace = showLabel ? Math.round(Ui.dp(c, 34) + artH * (FOCUS_SCALE - 1f) / 2f) : 0;
         radius = Ui.dp(c, 12);
         liftZ = Ui.dp(c, 14);
         setFocusable(true);
