@@ -292,9 +292,14 @@ public final class Home extends Activity {
         bottom.setClipChildren(false);
         bottom.setPadding(side, 0, side, Ui.dp(this, 30));
         hero = Ui.text(this, 34, Ui.TEXT, Ui.LIGHT);
-        hero.setPadding(Ui.dp(this, 10), 0, 0, Ui.dp(this, 16));
+        // A TextView clips its own shadow to its bounds, so the glow (26 dp) gets that much room
+        // on every side, taken back by negative margins so the name stays where it was.
+        int glow = Ui.dp(this, 26);
+        hero.setPadding(Ui.dp(this, 10) + glow, glow, glow, glow);
+        LinearLayout.LayoutParams heroLp = new LinearLayout.LayoutParams(-2, -2);
+        heroLp.setMargins(-glow, -glow, -glow, Ui.dp(this, 16) - glow);
         hero.setAlpha(0f);
-        bottom.addView(hero);
+        bottom.addView(hero, heroLp);
         dockBand = new Glass.Frame(this, 30);
         int bp = Ui.dp(this, 16);
         dockBand.setPadding(bp, bp, bp, bp);
