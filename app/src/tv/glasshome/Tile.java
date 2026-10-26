@@ -6,34 +6,43 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
 import android.view.animation.OvershootInterpolator;
 
 /**
  * One app: its 16:9 art with rounded corners, lifted and enlarged when focused, with its name
  * fading in underneath (grid tiles only; the dock shows the name large above itself).
+ *
+ * The lift is a real elevation shadow drawn by the render thread from the tile's outline, and the
+ * scale is a view property, so focusing a tile never redraws its art.
  */
 final class Tile extends View {
     static final float FOCUS_SCALE = 1.1f;
+    private static final Interpolator GROW = new OvershootInterpolator(1.2f);
+    private static final Interpolator SETTLE = new DecelerateInterpolator(1.6f);
 
     final Catalog.Item item;
     final boolean showLabel;
     final int artW, artH, labelSpace;
     private final float radius;
     private final Paint artPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint placeholder = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint letter = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF r = new RectF();
     private final Rect bounds = new Rect();
+    private final float liftZ;
     private Bitmap shaderFor;
-    private float labelAlpha, lift;
+    private String labelText;
+    private float labelAlpha;
     private ValueAnimator labelAnim;
 
     Tile(Context c, Catalog.Item item, int artW, int artH, boolean showLabel) {
@@ -42,8 +51,11 @@ final class Tile extends View {
         this.artW = artW;
         this.artH = artH;
         this.showLabel = showLabel;
-        this.labelSpace = showLabel ? Ui.dp(c, 30) : 0;
+        // Room for the whole label, descenders included, below the enlarged art: the tile's
+        // bounds clip what it draws, so a shorter space cut the bottom off the name.
+        this.labelSpace = showLabel ? Math.round(Ui.dp(c, 34) + artH * (FOCUS_SCALE - 1f) / 2f) : 0;
         radius = Ui.dp(c, 12);
+        liftZ = Ui.dp(c, 14);
         setFocusable(true);
         setFocusableInTouchMode(true);
         setClickable(true);
@@ -58,10 +70,17 @@ final class Tile extends View {
         label.setTextSize(Ui.dp(c, 14));
         label.setTextAlign(Paint.Align.CENTER);
         label.setShadowLayer(Ui.dp(c, 6), 0, 0, 0x99000000);
-        shadow.setColor(0xFF000000);
         setPivotX(artW / 2f);
         setPivotY(artH / 2f);
         setContentDescription(item.label);
+        // The shadow follows the art only, not the label space under it.
+        setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, Tile.this.artW, Tile.this.artH, radius);
+                o.setAlpha(0.9f);
+            }
+        });
     }
 
     @Override
@@ -78,20 +97,19 @@ final class Tile extends View {
     protected void onFocusChanged(boolean focused, int direction, Rect previous) {
         super.onFocusChanged(focused, direction, previous);
         float s = focused ? FOCUS_SCALE : 1f;
-        animate().scaleX(s).scaleY(s).translationZ(focused ? 1f : 0f)
-                .setInterpolator(focused ? new OvershootInterpolator(1.4f) : new DecelerateInterpolator())
-                .setDuration(focused ? 280 : 200).start();
-        animateLift(focused ? 1f : 0f);
+        animate().scaleX(s).scaleY(s).translationZ(focused ? liftZ : 0f)
+                .setInterpolator(focused ? GROW : SETTLE)
+                .setDuration(focused ? 260 : 200).start();
+        if (showLabel) fadeLabel(focused ? 1f : 0f);
     }
 
-    private void animateLift(float to) {
+    private void fadeLabel(float to) {
         if (labelAnim != null) labelAnim.cancel();
-        labelAnim = ValueAnimator.ofFloat(lift, to);
-        labelAnim.setDuration(220);
-        labelAnim.setInterpolator(new DecelerateInterpolator());
+        labelAnim = ValueAnimator.ofFloat(labelAlpha, to);
+        labelAnim.setDuration(200);
+        labelAnim.setInterpolator(SETTLE);
         labelAnim.addUpdateListener(a -> {
-            lift = (float) a.getAnimatedValue();
-            labelAlpha = lift;
+            labelAlpha = (float) a.getAnimatedValue();
             invalidate();
         });
         labelAnim.start();
@@ -100,12 +118,6 @@ final class Tile extends View {
     @Override
     protected void onDraw(Canvas c) {
         r.set(0, 0, artW, artH);
-        // A soft shadow appears as the tile lifts; the art covers all but its edges.
-        if (lift > 0.01f) {
-            shadow.setShadowLayer(Ui.dp(getContext(), 18) * lift, 0, Ui.dp(getContext(), 8) * lift,
-                    Math.round(0x99 * lift) << 24);
-            c.drawRoundRect(r, radius, radius, shadow);
-        }
         Bitmap art = item.art;
         if (art != null) {
             if (shaderFor != art) {
@@ -125,7 +137,8 @@ final class Tile extends View {
         }
         if (showLabel && labelAlpha > 0.01f) {
             label.setAlpha(Math.round(255 * labelAlpha));
-            String text = ellipsize(item.label.toString());
+            if (labelText == null) labelText = ellipsize(item.label.toString());
+            String text = labelText;
             // Below the enlarged art, so the label sits clear of the lens.
             float y = artH + Ui.dp(getContext(), 8) + (artH * (FOCUS_SCALE - 1f) / 2f) + label.getTextSize();
             c.drawText(text, artW / 2f, y, label);
