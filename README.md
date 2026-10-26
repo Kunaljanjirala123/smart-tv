@@ -1,18 +1,29 @@
 # Glass Home
 
-A fast, ad-free home screen for Fire TV in a liquid-glass style.
+A fast, ad-free home screen for Fire TV, in the style of tvOS, built from liquid glass.
 
-- **Liquid glass:** frosted panels that show the colours behind them, a bright rim and sheen,
-  and one glass highlight that springs from app to app.
-- **Your apps first:** a dock of up to five favourites on the first screen. Press Down for every
-  other app.
-- **Controls at the top:** Inputs (HDMI), network status, Settings and Edit.
-- **No ads, nothing downloaded:** the app has no internet permission, so it cannot show ads,
-  load recommendations or send data anywhere. Its only permission is reading whether the TV is
-  on Wi-Fi or Ethernet.
-- **Smooth:** the highlight and the page glide on springs that keep their speed when you hold a
-  D-pad key, the page moves in sub-pixel steps, tiles lift with real shadows drawn by the GPU,
-  and nothing is allocated while anything moves, so there are no garbage-collection stutters.
+- **The tvOS look:** a light theme with frosted glass (the default), Dark, the original night-sky
+  Aurora, or Auto: light from sunrise to sunset and dark at night.
+- **The stage:** the focused app's banner glows large in the middle of the screen, and the
+  backdrop takes on its colour.
+- **tvOS app icons:** each app's own icon on its brand colour, with a glass shine; TV banners
+  are a setting away. A focused icon lifts with a real shadow and a band of light sweeps across it.
+- **Weather:** conditions and temperature at the top left, and the hourly and 5-day forecast
+  on OK.
+- **Profile:** a name and an animal avatar next to the clock.
+- **Control Center** (OK on the clock): Wi-Fi, Bluetooth, inputs, appearance, StandBy, free
+  memory, settings and the apps you used last.
+- **Folders and jiggle mode:** put apps in folders; pick an app up, move it with the arrows,
+  put it down with OK.
+- **StandBy:** a big clock with the date, a calendar and the weather on black, as the TV's
+  screensaver or from Control Center. It drifts a little every minute so nothing burns in.
+- **No ads, no tracking:** Glass Home shows nothing it was paid to show and sends nothing
+  about you anywhere. Its only use of the internet is the weather, from
+  [Open-Meteo](https://open-meteo.com) (open data, no account, no key), and only for the city
+  you choose. Turn the weather off and it uses the internet for nothing at all.
+- **Smooth:** the page and the highlight glide on springs that keep their speed when you hold a
+  D-pad key, changes crossfade on the GPU, and nothing is allocated while anything moves, so
+  there are no garbage-collection stutters.
 - **Quick:** apps open with no transition, the wallpaper is drawn once in code, and the
   installer compiles your apps fully so they start faster.
 
@@ -20,13 +31,15 @@ A fast, ad-free home screen for Fire TV in a liquid-glass style.
 
 | Button | What it does |
 |---|---|
-| D-pad | Move. Down from the dock goes to all apps; Up goes to the controls. |
-| OK | Open the app. Hold OK for its menu. |
-| Menu (three lines) | On an app: Add to dock, Move, Hide, App info. Elsewhere: Edit. |
+| D-pad | Move. Down from the dock goes to every app; Up goes to the weather and the clock. |
+| OK | Open the app. On the weather: the forecast. On the clock: Control Center. |
+| Menu (three lines) | On an app: Move, Dock, Move to Folder, Hide, Close App, App Info. Elsewhere: Settings. |
 | Back | Return to the first dock app. |
 | Home | Glass Home. |
 
-**Edit** (top right) has *Show a hidden app*, *Reset layout* and *Open Amazon's home screen*.
+**Settings** (the gear, top right) has the look, icon style, focus effect, stage, dock size, apps
+per row, status bar, weather, profile, StandBy, hidden apps, *Run Setup Again*, *Reset Layout*
+and *Open Amazon's Home Screen*.
 
 ## Install from a Windows PC
 
@@ -37,7 +50,9 @@ A fast, ad-free home screen for Fire TV in a liquid-glass style.
 3. Double-click `windows/Install-GlassHome.bat`, type the TV's IPv4 address, press Allow on the TV.
    If adb is already connected to the TV it is used without asking, or give the address on the
    command line: `Install-GlassHome.bat 10.0.0.5`.
-4. At the end it offers to clean the TV (below).
+4. It asks for your city (for the weather) and whether StandBy should be the screensaver, then
+   offers to clean the TV (below). The first time Glass Home opens, a short setup lets you
+   choose the look and your profile.
 5. Turn ADB debugging off again when it finishes.
 
 `windows/Uninstall-GlassHome.bat` gives HOME back to Amazon and removes the app.
@@ -69,7 +84,10 @@ immediate.
 ## Building
 
 GitHub Actions builds every push to `main` with Google's official Android SDK
-(`.github/workflows/build.yml`) and publishes the APK as a release. Locally:
+(`.github/workflows/build.yml`) and publishes the APK as a release. Pull requests are built too,
+walked through on an Android TV emulator (`.github/preview.sh`), and their screenshots and APK
+published as a `preview-pr-N` pre-release, so a change can be seen and tried before it is merged.
+Locally:
 `ANDROID_HOME=... bash app/build.sh` (JDK 17, `platforms;android-30`, `build-tools;34.0.0`).
 
 The signing key in `signing/` is committed so every build can update the installed app. Anyone
@@ -78,4 +96,5 @@ access to it.
 
 ## Licence
 
-MIT. `Guard.java` and `Input.java` are adapted from dumbtv home (MIT).
+MIT. `Guard.java` and `Input.java` are adapted from dumbtv home (MIT). The look and features
+follow the tvOS Launcher by Siddhant; no code or images from it are used.

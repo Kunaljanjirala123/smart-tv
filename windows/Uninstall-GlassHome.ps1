@@ -22,6 +22,13 @@ else {
   if ($parts.Count -gt 0) { Sh "settings put global alarm_manager_constants $($parts -join ',')" | Out-Null }
   else { Sh 'settings delete global alarm_manager_constants' | Out-Null }
 }
+# The screensaver goes back to what it was before StandBy.
+if ((Sh 'settings get secure screensaver_components') -like "$Pkg/*") {
+  $old = Sh 'settings get global glasshome_old_screensaver'
+  if ($old -and $old -ne 'null') { Sh "settings put secure screensaver_components $old" | Out-Null }
+  else { Sh 'settings delete secure screensaver_components' | Out-Null }
+  Sh 'settings delete global glasshome_old_screensaver' | Out-Null
+}
 & $Adb -s $Serial uninstall $Pkg | Out-Host
 Sh 'am start -a android.intent.action.MAIN -c android.intent.category.HOME' | Out-Null
 & $Adb disconnect $Serial | Out-Null

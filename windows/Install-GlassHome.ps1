@@ -30,6 +30,9 @@ $out = (A install -r "$Apk") -join "`n"
 if ($out -notmatch 'Success') { Fail "Install failed: $out" }
 Ok 'installed'
 Sh "dumpsys deviceidle whitelist +$Pkg" | Out-Null
+# Control Center's recent apps read which apps were used last; only adb can allow that on a TV.
+Sh "appops set $Pkg GET_USAGE_STATS allow" | Out-Null
+Ok 'recent apps in Control Center: allowed'
 
 # ---- HOME takeover (the same method dumbtv home uses on Fire OS)
 Say 'Taking over the HOME button'
@@ -64,6 +67,24 @@ if ($bound) { Ok 'HOME button: Glass Home' } else { Warn 'Fire OS has not confir
 Sh 'input keyevent KEYCODE_WAKEUP' | Out-Null
 Sh "am start -n $Pkg/.Home" | Out-Null
 
+# ---- weather and screensaver
+Say 'Weather and screensaver'
+Write-Host '  The weather comes from Open-Meteo (no account, no tracking), only for the city you choose.'
+$city = (Read-Host '  Your city for the weather (Enter to choose it on the TV later)').Trim()
+$city = $city -replace "[^\p{L}\p{N} ,.\-]", ''
+if ($city) {
+  Sh "am start -n $Pkg/.Home --es city '$city'" | Out-Null
+  Ok "weather: $city"
+}
+$ans = Read-Host '  Use the StandBy clock (time, date, weather) as the TV''s screensaver? (Y/n)'
+if ($ans -notmatch '^(n|no)$') {
+  $old = Sh 'settings get secure screensaver_components'
+  if ($old -and $old -ne 'null' -and $old -notlike "$Pkg/*") { Sh "settings put global glasshome_old_screensaver $old" | Out-Null }
+  Sh "settings put secure screensaver_components $Pkg/$Pkg.StandByDream" | Out-Null
+  Sh 'settings put secure screensaver_enabled 1' | Out-Null
+  Ok 'screensaver: StandBy'
+}
+
 # ---- faster app starts
 Say 'Making your apps start faster (compiling them fully, about 1-3 minutes)'
 $third = @((Sh 'pm list packages -3') -split "`n" | ForEach-Object { $_.Trim() -replace '^package:', '' } | Where-Object { $_ -and $_ -ne $Pkg })
@@ -79,9 +100,10 @@ if ((Sh 'pm path tv.dumbtv.home') -match 'package:') {
 }
 
 Say 'Done'
-Write-Host '  Press HOME on the remote: Glass Home should appear.'
-Write-Host '  Menu button (three lines) on any app: pin to dock, move, hide, app info.'
-Write-Host '  Edit (top right) > Open Amazon''s home screen, any time you need it.'
+Write-Host '  Press HOME on the remote: Glass Home should appear, with a short setup the first time.'
+Write-Host '  OK on the clock: Control Center (Wi-Fi, inputs, StandBy, recent apps).'
+Write-Host '  Menu button (three lines) on any app: move, dock, folder, hide, app info.'
+Write-Host '  Settings (gear, top right) > Open Amazon''s Home Screen, any time you need it.'
 Write-Host ''
 $ans = Read-Host 'Also switch off Amazon''s adverts, tracking and junk apps now? (Y/n)'
 if ($ans -notmatch '^(n|no)$') { & "$Here\Clean-FireTV.ps1" -Ip $Serial -Inner }

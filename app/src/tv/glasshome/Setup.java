@@ -36,6 +36,7 @@ final class Setup extends FrameLayout {
     }
 
     private final Host host;
+    private final Prefs prefs;
     private final Glass.Frame card;
     private final LinearLayout body;
     private String theme;
@@ -46,6 +47,7 @@ final class Setup extends FrameLayout {
     Setup(Context c, Host host, Prefs prefs) {
         super(c);
         this.host = host;
+        this.prefs = prefs;
         theme = prefs.theme();
         avatar = prefs.avatar();
         name = prefs.name();
@@ -159,7 +161,7 @@ final class Setup extends FrameLayout {
             if (fires(action, e, EditorInfo.IME_ACTION_DONE)) {
                 Sheet.hideKeyboard(v);
                 keepName(field);
-                weather();
+                afterProfile();
                 return true;
             }
             return false;
@@ -167,10 +169,16 @@ final class Setup extends FrameLayout {
         body.addView(field, new LinearLayout.LayoutParams(-1, -2));
         TextView next = button("Continue", true, () -> {
             keepName(field);
-            weather();
+            afterProfile();
         });
         buttons(next);
         if (chosen != null) chosen.requestFocus();
+    }
+
+    /** The installer may already have set the weather's city; then there is nothing to ask. */
+    private void afterProfile() {
+        if (prefs.hasPlace()) done();
+        else weather();
     }
 
     private void keepName(EditText field) {
@@ -266,7 +274,9 @@ final class Setup extends FrameLayout {
         String[] tips = {
                 "Press OK on the clock for Control Center: Wi-Fi, inputs, StandBy and recent apps.",
                 "Press the Menu button (≡) on any app to move it, hide it or put it in a folder.",
-                place != null ? "The weather for " + place.name + " shows at the top left. Press OK on it for the forecast."
+                place != null || prefs.hasPlace()
+                        ? "The weather for " + (place != null ? place.name : prefs.place())
+                                + " shows at the top left. Press OK on it for the forecast."
                         : "Add the weather any time from Settings.",
                 "Press Down from the dock for every app.",
         };
