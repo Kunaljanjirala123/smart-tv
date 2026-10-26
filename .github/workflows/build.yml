@@ -71,7 +71,8 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: false
           script: bash .github/preview.sh
-      # main replaces "preview"; a pull request gets its own "preview-pr-N" pre-release.
+      # main replaces "preview"; a pull request gets its own "preview-pr-N" pre-release, with the
+      # APK it tested, so the change can be tried on a TV before it is merged.
       - name: Publish screenshots as a pre-release
         if: always()
         env:
@@ -79,5 +80,6 @@ jobs:
         run: |
           tag=${{ github.event_name == 'pull_request' && format('preview-pr-{0}', github.event.number) || 'preview' }}
           gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" shots/* --prerelease --title "Emulator preview ($tag)" --target "${{ github.sha }}" \
-            --notes "Screenshots from an Android TV 11 emulator, run ${{ github.run_id }}, commit ${{ github.sha }}." --latest=false
+          gh release create "$tag" shots/* apk/glass-home.apk apk/glass-home.apk.sha256 --prerelease \
+            --title "Emulator preview ($tag)" --target "${{ github.sha }}" --latest=false \
+            --notes "Screenshots from an Android TV 11 emulator, run ${{ github.run_id }}, commit ${{ github.event.pull_request.head.sha || github.sha }}."

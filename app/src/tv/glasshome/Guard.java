@@ -33,7 +33,6 @@ import android.view.accessibility.AccessibilityEvent;
 public final class Guard extends AccessibilityService {
     static final String AMAZON = "com.amazon.tv.launcher";
     private static final String AMAZON_HOME = "com.amazon.tv.launcher.ui.HomeActivity_vNext";
-    private static final int COVER_COLOR = 0xFF070912;
     private static final long COVER_MAX_MS = 1500;
     private static final long REPEAT_MS = 1000;
     private static final long LAUNCH_FALLBACK_MS = 150;
@@ -173,7 +172,7 @@ public final class Guard extends AccessibilityService {
 
     private void cover() {
         if (cover == null) return;
-        cover.setBackgroundColor(COVER_COLOR);
+        cover.setBackgroundColor(Theme.cover(this));
         cover.setVisibility(View.VISIBLE);
         handler.removeCallbacks(uncover);
         handler.postDelayed(uncover, COVER_MAX_MS);

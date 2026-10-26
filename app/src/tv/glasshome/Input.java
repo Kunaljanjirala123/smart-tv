@@ -81,10 +81,10 @@ public final class Input extends Activity {
             view.setFocusable(true);
             root.addView(view, new FrameLayout.LayoutParams(MATCH, MATCH));
         }
-        status = Ui.text(this, 22, Ui.SOFT, Ui.LIGHT);
+        status = Ui.text(this, 22, 0xCCFFFFFF, Ui.LIGHT);
         status.setVisibility(View.GONE);
         root.addView(status, new FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER));
-        name = Ui.text(this, 20, Ui.TEXT, Ui.REGULAR);
+        name = Ui.text(this, 20, 0xFFFFFFFF, Ui.REGULAR);
         name.setText(getIntent().getCharSequenceExtra(EXTRA_NAME));
         name.setPadding(Ui.dp(this, 22), Ui.dp(this, 10), Ui.dp(this, 22), Ui.dp(this, 10));
         GradientDrawable pill = new GradientDrawable();

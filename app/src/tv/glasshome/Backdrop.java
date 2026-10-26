@@ -1,5 +1,6 @@
 package tv.glasshome;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -15,32 +16,53 @@ import android.util.DisplayMetrics;
 import android.view.View;
 
 /**
- * The wallpaper, drawn once in code (no image files, nothing downloaded), and a blurred,
- * brightened copy of it that every glass surface samples at its own screen position. Sampling a
- * pre-blurred copy gives the frosted-glass look without live blur, which these TVs cannot afford.
+ * The wallpaper for the current theme, drawn once in code (no image files, nothing downloaded),
+ * and a blurred, brightened copy of it that every glass surface samples at its own screen
+ * position. Sampling a pre-blurred copy gives the frosted-glass look without live blur, which
+ * these TVs cannot afford.
  */
 final class Backdrop {
     private static Backdrop instance;
 
+    final String theme;
     final int screenW, screenH;
     final Bitmap sharp, frosted;
 
     static Backdrop get(Context c) {
         DisplayMetrics m = c.getResources().getDisplayMetrics();
         int w = Math.max(m.widthPixels, m.heightPixels), h = Math.min(m.widthPixels, m.heightPixels);
-        if (instance == null || instance.screenW != w || instance.screenH != h) instance = new Backdrop(w, h);
+        Theme t = Theme.now;
+        if (instance == null || instance.screenW != w || instance.screenH != h || !instance.theme.equals(t.id)) {
+            instance = new Backdrop(t, w, h);
+        }
         return instance;
     }
 
-    private Backdrop(int w, int h) {
+    private Backdrop(Theme t, int w, int h) {
+        theme = t.id;
         screenW = w;
         screenH = h;
-        sharp = paint(Math.max(1, w / 3), Math.max(1, h / 3));
-        frosted = frost(sharp);
+        int bw = Math.max(1, w / 3), bh = Math.max(1, h / 3);
+        sharp = t.sky == null ? aurora(bw, bh) : sky(t, bw, bh);
+        frosted = frost(sharp, t.frostSaturation, t.frostLift);
+    }
+
+    /** A vertical sky with a soft pool of light where the stage sits. */
+    private static Bitmap sky(Theme t, int w, int h) {
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+        p.setShader(new LinearGradient(0, 0, 0, h, t.sky, t.skyAt, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h, p);
+        int pool = t.light ? 0x59FFFFFF : 0x1AFFFFFF;
+        p.setShader(new RadialGradient(w * 0.5f, h * 0.36f, w * 0.42f,
+                new int[] {pool, alpha(pool, 0.35f), 0x00FFFFFF}, new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h, p);
+        return b;
     }
 
     /** Deep navy with slow, overlapping pools of colour: an aurora behind frosted glass. */
-    private static Bitmap paint(int w, int h) {
+    private static Bitmap aurora(int w, int h) {
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
@@ -75,30 +97,64 @@ final class Backdrop {
     }
 
     /** Small, blurred, a little brighter and more saturated: what light looks like through glass. */
-    private static Bitmap frost(Bitmap src) {
-        int w = Math.max(1, src.getWidth() / 4), h = Math.max(1, src.getHeight() / 4);
-        Bitmap small = Bitmap.createScaledBitmap(src, w, h, true);
-        int[] px = new int[w * h];
-        small.getPixels(px, 0, w, 0, 0, w, h);
-        for (int i = 0; i < 3; i++) boxBlur(px, w, h, 3);
-        Bitmap blurred = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        blurred.setPixels(px, 0, w, 0, 0, w, h);
-        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+    private static Bitmap frost(Bitmap src, float saturation, int lift) {
+        Bitmap blurred = blur(src, 4, 3);
+        Bitmap out = Bitmap.createBitmap(blurred.getWidth(), blurred.getHeight(), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         ColorMatrix cm = new ColorMatrix();
-        cm.setSaturation(1.45f);
-        ColorMatrix lift = new ColorMatrix(new float[] {
-                1.15f, 0, 0, 0, 18,
-                0, 1.15f, 0, 0, 18,
-                0, 0, 1.15f, 0, 22,
-                0, 0, 0, 1, 0});
-        cm.postConcat(lift);
+        cm.setSaturation(saturation);
+        cm.postConcat(new ColorMatrix(new float[] {
+                1.12f, 0, 0, 0, lift,
+                0, 1.12f, 0, 0, lift,
+                0, 0, 1.12f, 0, lift + 4,
+                0, 0, 0, 1, 0}));
         Paint p = new Paint(Paint.FILTER_BITMAP_FLAG);
         p.setColorFilter(new ColorMatrixColorFilter(cm));
         c.drawBitmap(blurred, 0, 0, p);
-        small.recycle();
         blurred.recycle();
         return out;
+    }
+
+    /**
+     * {@code src} shrunk by {@code shrink} and box-blurred three times with {@code radius}: close
+     * to a Gaussian blur of {@code shrink * radius} pixels, for very little work. The blur runs on
+     * premultiplied colour, so transparent pixels fade a colour out instead of darkening it.
+     */
+    static Bitmap blur(Bitmap src, int shrink, int radius) {
+        int w = Math.max(1, src.getWidth() / shrink), h = Math.max(1, src.getHeight() / shrink);
+        Bitmap small = Bitmap.createScaledBitmap(src, w, h, true);
+        int[] px = new int[w * h];
+        small.getPixels(px, 0, w, 0, 0, w, h);
+        if (small != src) small.recycle();
+        premultiply(px, true);
+        for (int i = 0; i < 3; i++) boxBlur(px, w, h, radius);
+        premultiply(px, false);
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        out.setPixels(px, 0, w, 0, 0, w, h);
+        return out;
+    }
+
+    /** Colour times alpha ({@code on}), or back again; opaque pixels are left as they are. */
+    private static void premultiply(int[] px, boolean on) {
+        for (int i = 0; i < px.length; i++) {
+            int c = px[i], a = c >>> 24;
+            if (a == 255) continue;
+            if (a == 0) {
+                px[i] = 0;
+                continue;
+            }
+            int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+            if (on) {
+                r = r * a / 255;
+                g = g * a / 255;
+                b = b * a / 255;
+            } else {
+                r = Math.min(255, r * 255 / a);
+                g = Math.min(255, g * 255 / a);
+                b = Math.min(255, b * 255 / a);
+            }
+            px[i] = a << 24 | r << 16 | g << 8 | b;
+        }
     }
 
     /** One horizontal and one vertical running-sum pass. */
@@ -137,23 +193,75 @@ final class Backdrop {
         return horizontal ? line * w + i : i * w + line;
     }
 
-    /** Full-screen wallpaper view; it never moves, the content scrolls over it. */
+    /**
+     * Full-screen wallpaper view; it never moves, the content scrolls over it. The focused app's
+     * colour is pooled into a copy of the (small) wallpaper bitmap once per change, so every frame
+     * paints the background once; only during the short crossfade are two copies painted.
+     */
     static final class Wallpaper extends View {
         private final Backdrop b;
         private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        private final Paint fade = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         private final Rect src = new Rect();
         private final RectF dst = new RectF();
+        private Bitmap now, before;
+        private float mix = 1f;
+        private int colour;
+        private ValueAnimator anim;
 
         Wallpaper(Context c) {
             super(c);
             b = get(c);
+            now = b.sharp;
+        }
+
+        /** Crossfades to the backdrop with {@code colour} pooled behind the stage. */
+        void wash(int colour) {
+            if (colour == this.colour && now != b.sharp) return;
+            this.colour = colour;
+            // Mid-fade, the picture on screen is closest to the one being faded in.
+            before = mix >= 0.5f ? now : before;
+            now = pool(colour);
+            if (anim != null) anim.cancel();
+            mix = 0f;
+            anim = ValueAnimator.ofFloat(0f, 1f);
+            anim.setDuration(420);
+            anim.setInterpolator(Ui.EASE);
+            anim.addUpdateListener(a -> {
+                mix = (float) a.getAnimatedValue();
+                invalidate();
+            });
+            anim.start();
+        }
+
+        private Bitmap pool(int colour) {
+            Bitmap out = b.sharp.copy(Bitmap.Config.ARGB_8888, true);
+            int w = out.getWidth(), h = out.getHeight(), a = Theme.now.tintAlpha, col = Ui.glow(colour);
+            Paint p = new Paint(Paint.DITHER_FLAG);
+            p.setShader(new RadialGradient(w * 0.5f, h * 0.36f, w * 0.62f,
+                    new int[] {Ui.alpha(col, a), Ui.alpha(col, a * 2 / 5), Ui.alpha(col, 0)},
+                    new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
+            new Canvas(out).drawRect(0, 0, w, h, p);
+            return out;
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            if (anim != null) anim.cancel();
+            super.onDetachedFromWindow();
         }
 
         @Override
         protected void onDraw(Canvas c) {
             src.set(0, 0, b.sharp.getWidth(), b.sharp.getHeight());
             dst.set(0, 0, getWidth(), getHeight());
-            c.drawBitmap(b.sharp, src, dst, paint);
+            if (mix < 1f && before != null) {
+                c.drawBitmap(before, src, dst, paint);
+                fade.setAlpha(Math.round(mix * 255));
+                c.drawBitmap(now, src, dst, fade);
+            } else {
+                c.drawBitmap(now, src, dst, paint);
+            }
         }
     }
 }
